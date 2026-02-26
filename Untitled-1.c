@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <math.h>
-
+#include <time.h>
 
 
 typedef struct successeur{ 
@@ -201,6 +201,7 @@ float * recherchep(struct successeur** tableauSommets, float *vecteur0, int Nbso
         vecteur1[i]=0;
     }
 
+
     vecteur1=multvectmmat(tableauSommets,vecteur0,Nbsommet);
 
 
@@ -208,7 +209,11 @@ float * recherchep(struct successeur** tableauSommets, float *vecteur0, int Nbso
     {
         float *temp=vecteur0;
         vecteur0=vecteur1;
+        clock_t start = clock();    
         vecteur1=multvectmmat(tableauSommets,vecteur0,Nbsommet);
+        clock_t end = clock();
+        printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
+
         free(temp);
 
         float sum=0;
@@ -241,7 +246,7 @@ int Nbval=0;
 
 
 /*POUR LE FORMAT MTX*/
-struct resultat *res = lecturefichier_matrixm("Harvard500.mtx",&Nblignes,&Nbacrs,&Nbval);
+struct resultat *res = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval);
 struct successeur** tableauSommets=res->successeur_probabilite;
 Nbsommet=Nblignes;
 //affichertab(tableauSommets,Nbsommet);
