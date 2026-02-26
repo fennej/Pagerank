@@ -1,0 +1,1 @@
+affichertab(tableauSommets,Nbsommet);
