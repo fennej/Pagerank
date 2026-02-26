@@ -97,12 +97,17 @@ void affichertab(struct successeur** tableau,int Nbsomments){
 }
 
 
+void afficher_vecteur(float *vecteur, int Nbsommet) {
+    for(int i=0;i<Nbsommet;i++){
+        printf("Sommet %d: %f\n", i+1, vecteur[i]);
+    }
+}
+
+
  void multvectmmat(struct contigue* tableauSommets,float* vecteur1, float *vecteur0, int Nbsommet, int Nbvaleurs) {
     // float *vecteur1=malloc(Nbsommet*sizeof(float));
+    memset(vecteur1, 0, Nbsommet * sizeof(float));
 
-    for(int i=0;i<Nbsommet;i++){
-        vecteur1[i]=0;
-    }
 
     for(int i=0;i<Nbvaleurs;i++){
         float sum=0.0;
@@ -117,8 +122,6 @@ void affichertab(struct successeur** tableau,int Nbsomments){
 
 
 
-
-
 float norme_a1(float *vecteur1, float *vecteur0, int Nbsommet) {
     float sum=0.0;
     for(int i=0;i<Nbsommet;i++){
@@ -127,11 +130,6 @@ float norme_a1(float *vecteur1, float *vecteur0, int Nbsommet) {
     return sum;
 }
 
-void afficher_vecteur(float *vecteur, int Nbsommet) {
-    for(int i=0;i<Nbsommet;i++){
-        printf("Sommet %d: %f\n", i+1, vecteur[i]);
-    }
-}
 
 
 
@@ -139,10 +137,7 @@ void afficher_vecteur(float *vecteur, int Nbsommet) {
 //le graphe dois etre fortement connexe pour que la recherche de la page rank converge
 float * recherchep(struct contigue* tableauSommets, float *vecteur0, int Nbsommet, int Nbvaleurs) {
     float *vecteur1=malloc(Nbsommet*sizeof(float));
-    for(int i=0;i<Nbsommet;i++){
-        vecteur1[i]=0;
-    }
-
+    memset(vecteur1, 0, Nbsommet * sizeof(float));
 
     // printf("first dump:\n");   
     // afficher_vecteur(vecteur0,Nbsommet);
@@ -160,10 +155,9 @@ float * recherchep(struct contigue* tableauSommets, float *vecteur0, int Nbsomme
 
     while (norme_a1(vecteur1,vecteur0,Nbsommet)>EPSILON)
     {
-        float *temp=vecteur0;
-        //vecteur0=vecteur1;
-
-       memcpy(vecteur0,vecteur1,Nbsommet*sizeof(float));
+        float *temp = vecteur0;
+        vecteur0 = vecteur1;
+        vecteur1 = temp;
         clock_t start = clock();
         
 
@@ -210,6 +204,11 @@ int Nbacrs=0;
 int Nblignes=0;
 int Nbcol=0;
 int Nbval=0;
+
+
+
+
+
 
 
 /*POUR LE FORMAT MTX*/
