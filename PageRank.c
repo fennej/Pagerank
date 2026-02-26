@@ -97,8 +97,8 @@ void affichertab(struct successeur** tableau,int Nbsomments){
 }
 
 
-float * multvectmmat(struct contigue* tableauSommets, float *vecteur0, int Nbsommet, int Nbvaleurs) {
-    float *vecteur1=malloc(Nbsommet*sizeof(float));
+ void multvectmmat(struct contigue* tableauSommets,float* vecteur1, float *vecteur0, int Nbsommet, int Nbvaleurs) {
+    // float *vecteur1=malloc(Nbsommet*sizeof(float));
 
     for(int i=0;i<Nbsommet;i++){
         vecteur1[i]=0;
@@ -113,7 +113,6 @@ float * multvectmmat(struct contigue* tableauSommets, float *vecteur0, int Nbsom
         vecteur1[suc-1]+=vecteur0[pred-1]*prob;//pas oublier les -1 car les sommets commencent à 1 dans le fichier
         
 }
-return vecteur1;
 }
 
 
@@ -128,27 +127,59 @@ float norme_a1(float *vecteur1, float *vecteur0, int Nbsommet) {
     return sum;
 }
 
+void afficher_vecteur(float *vecteur, int Nbsommet) {
+    for(int i=0;i<Nbsommet;i++){
+        printf("Sommet %d: %f\n", i+1, vecteur[i]);
+    }
+}
+
+
+
+
 //le graphe dois etre fortement connexe pour que la recherche de la page rank converge
 float * recherchep(struct contigue* tableauSommets, float *vecteur0, int Nbsommet, int Nbvaleurs) {
     float *vecteur1=malloc(Nbsommet*sizeof(float));
     for(int i=0;i<Nbsommet;i++){
         vecteur1[i]=0;
     }
-    vecteur1=multvectmmat(tableauSommets,vecteur0,Nbsommet,Nbvaleurs);
+
+
+    // printf("first dump:\n");   
+    // afficher_vecteur(vecteur0,Nbsommet);
+    // printf("vector1:\n");   
+    // afficher_vecteur(vecteur1,Nbsommet);    
+
+
+    multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+
+    // printf("after first multiplication:\n");
+    // printf("vector0:\n");   
+    // afficher_vecteur(vecteur0,Nbsommet);
+    // printf("vector1:\n");
+    // afficher_vecteur(vecteur1,Nbsommet);    
 
     while (norme_a1(vecteur1,vecteur0,Nbsommet)>EPSILON)
     {
         float *temp=vecteur0;
-        vecteur0=vecteur1;
+        //vecteur0=vecteur1;
 
+       memcpy(vecteur0,vecteur1,Nbsommet*sizeof(float));
         clock_t start = clock();
-    
-        vecteur1=multvectmmat(tableauSommets,vecteur0,Nbsommet,Nbvaleurs);
+        
+
+
+        multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+
+        // printf("vector0:\n");   
+        // afficher_vecteur(vecteur0,Nbsommet);
+        // printf("vector1:\n");
+        // afficher_vecteur(vecteur1,Nbsommet);    
+
         clock_t end = clock();
         printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
 
 
-        free(temp);
+      //  free(temp);
 
         float sum=0;
         for(int i=0;i<Nbsommet;i++){
@@ -159,12 +190,6 @@ float * recherchep(struct contigue* tableauSommets, float *vecteur0, int Nbsomme
     }
     
     return vecteur1;
-}
-
-void afficher_vecteur(float *vecteur, int Nbsommet) {
-    for(int i=0;i<Nbsommet;i++){
-        printf("Sommet %d: %f\n", i+1, vecteur[i]);
-    }
 }
 
 
@@ -204,7 +229,7 @@ float *vecteur0=malloc(Nbsommet*sizeof(float));
    // afficher_vecteur(vecteur0,Nbsommet);
     vecteur0=recherchep(tableauSommets,vecteur0,Nbsommet,Nbval);
     printf("PageRank:\n");
-    afficher_vecteur(vecteur0,Nbsommet);
+  //  afficher_vecteur(vecteur0,Nbsommet);
 
     float sum=0;
     for (int i = 0; i < Nbsommet; i++)
