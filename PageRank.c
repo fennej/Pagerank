@@ -5,13 +5,15 @@
 #include <math.h>
 #include <time.h>
 
+
 typedef struct successeur{ 
     int sommet;
     float probabilite;
     struct successeur* suivant;
 }*Successeur;
 
-const float EPSILON = 0.0001;
+const float EPSILON = 0.00001;
+const float ALPHA=0.5;
 
 struct resultat{
     int * successeur_sommet;
@@ -26,7 +28,7 @@ struct contigue{
 };
 
 
-struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int *Nbcol, int *Nbval){
+struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,int**tabD){
     FILE* file = fopen(filename, "r");
     if (file == NULL) {
         printf("Erreur ouverture fichier\n");
@@ -50,6 +52,12 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
         nbsuc[i]=0;
      }
 
+     *tabD=malloc(*NbLignes*sizeof(int));
+     for(int i=0;i<*NbLignes;i++){
+        (*tabD)[i]=1;
+     }
+
+     
     struct contigue *tabcontigue=malloc(*Nbval*sizeof(struct contigue));
 
 
@@ -61,6 +69,7 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
         tabcontigue[i].pred=pred;
         tabcontigue[i].suc=suc;
         nbsuc[pred-1]++;
+        (*tabD)[pred-1]=0;
     }
    // affichertab(tableauSommets,*NbLignes);
 
@@ -116,7 +125,10 @@ void afficher_vecteur(float *vecteur, int Nbsommet) {
         float prob=tableauSommets[i].probabilite;
 
         vecteur1[suc-1]+=vecteur0[pred-1]*prob;//pas oublier les -1 car les sommets commencent à 1 dans le fichier
+
         
+       // vecteur1[tableauSommets[i].suc-1]+=vecteur0[tableauSommets[i].pred-1]*tableauSommets[i].probabilite;//pas oublier les -1 car les sommets commencent à 1 dans le fichier
+
 }
 }
 
@@ -134,18 +146,89 @@ float norme_a1(float *vecteur1, float *vecteur0, int Nbsommet) {
 
 
 
+float mult_vectligne_vectcol(float *vect_ligne,float* vect_col,int nbrdesommet){
+    float res=0;
+for (int i=0;i<nbrdesommet;i++){
+    res+=vect_ligne[i]*vect_col[i];
+}
+return res;
+}
+
+struct contigue* mult_scalair(struct contigue *tab,float scalair,int nbsommets){
+    //pour trouver le alphaP 
+    struct contigue *res=malloc(nbsommets*sizeof(struct contigue));
+    memcpy(res,tab,nbsommets*sizeof(struct contigue));
+
+    for(int i=0;i<nbsommets;i++){
+        res[i].probabilite*=scalair;
+    }
+    return res;
+}
+
+float * mult_vect_scalair(float *vecteur,float scalair,int nbsommet){
+    for(int i=0;i<nbsommet;i++){
+        vecteur[i]=vecteur[i]*scalair;
+    }
+    return vecteur;
+}
+
+
+
+float calculer_cst(float* veucteur, float* vecteurF_P_ALPHA_unsurn,float unsurN,int nbsommet){
+    /*le resultat sera exris dans vecteur*/
+    float premier_terme=mult_vectligne_vectcol(veucteur,vecteurF_P_ALPHA_unsurn,nbsommet);
+    float deuxiemme_terme=(1-ALPHA)*unsurN;
+    float constante=premier_terme+deuxiemme_terme;
+    return constante;
+}
+
+
+
+float* addition_deux_vecteurs(float* vecteur1, float* vecteur0, int nbsommet){
+    for(int i=0;i<nbsommet;i++){
+        vecteur1[i]=vecteur1[i]+vecteur0[i];
+    }
+}
+
+
+
+
+
 //le graphe dois etre fortement connexe pour que la recherche de la page rank converge
-float * recherchep(struct contigue* tableauSommets, float *vecteur0, int Nbsommet, int Nbvaleurs) {
+float * recherchep(struct contigue* tableauSommets, float *vecteur0,int *vecteurD, int Nbsommet, int Nbvaleurs) {
     float *vecteur1=malloc(Nbsommet*sizeof(float));
     memset(vecteur1, 0, Nbsommet * sizeof(float));
+    float *vecteurD_Mult1surN_MultAlpha=malloc(Nbsommet*sizeof(float));
+     float UnSurN=1.0/Nbsommet;
 
+        for(int i=0;i<Nbsommet;i++){
+            vecteurD_Mult1surN_MultAlpha[i]=ALPHA*UnSurN*vecteurD[i];
+        }
+    
+  
     // printf("first dump:\n");   
     // afficher_vecteur(vecteur0,Nbsommet);
     // printf("vector1:\n");   
     // afficher_vecteur(vecteur1,Nbsommet);    
 
 
-    multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+
+     multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+
+    // struct contigue * aP=mult_scalair(tableauSommets,ALPHA,Nbsommet);
+
+    //  multvectmmat(aP,vecteur0,vecteur1,Nbsommet,Nbvaleurs);
+
+    //   float deuxieme_terme=calculer_cst(vecteur0,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
+     
+    //  for (int i=0;i<Nbsommet;i++){
+    //     vecteur1[i]=vecteur1[i]+deuxieme_terme;
+    //  }
+
+
+
+
+  //  multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbsommet);
 
     // printf("after first multiplication:\n");
     // printf("vector0:\n");   
@@ -163,6 +246,20 @@ float * recherchep(struct contigue* tableauSommets, float *vecteur0, int Nbsomme
 
 
         multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+       // multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbsommet); avant
+
+
+
+
+        // multvectmmat(aP,vecteur0,vecteur1,Nbsommet,Nbvaleurs);
+        // float deuxieme_terme=calculer_cst(vecteur0,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
+        
+        // for (int i=0;i<Nbsommet;i++){
+        //     vecteur1[i]=vecteur1[i]+deuxieme_terme;
+        // }
+
+
+
 
         // printf("vector0:\n");   
         // afficher_vecteur(vecteur0,Nbsommet);
@@ -196,6 +293,11 @@ void afficher_contigue(struct contigue* tab,int Nbvaleurs){
 }
 
 
+
+
+
+
+
 int main(){
 
 int Nbsommet = 0;
@@ -206,13 +308,12 @@ int Nbcol=0;
 int Nbval=0;
 
 
-
-
-
+/*initialisation du tableu D qui est est ce que la ligne na pas de suc*/
+int *tabD=NULL;
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval);
+struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 //affichertab(tableauSommets,Nbsommet);
@@ -226,7 +327,7 @@ float *vecteur0=malloc(Nbsommet*sizeof(float));
     printf("Vecteur initial:\n");
 
    // afficher_vecteur(vecteur0,Nbsommet);
-    vecteur0=recherchep(tableauSommets,vecteur0,Nbsommet,Nbval);
+    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
     printf("PageRank:\n");
   //  afficher_vecteur(vecteur0,Nbsommet);
 
