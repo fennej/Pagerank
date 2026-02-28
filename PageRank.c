@@ -75,6 +75,7 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
 
 
    for(int i=0;i<*NbLignes;i++){
+    if(nbsuc[i]>0)
     nbsuc[i]=1.0/nbsuc[i];
    }
 
@@ -177,15 +178,15 @@ float * mult_vect_scalair(float *vecteur,float scalair,int nbsommet){
 float calculer_cst(float* veucteur, float* vecteurF_P_ALPHA_unsurn,float unsurN,int nbsommet){
     /*le resultat sera exris dans vecteur*/
     float premier_terme=mult_vectligne_vectcol(veucteur,vecteurF_P_ALPHA_unsurn,nbsommet);
-    float deuxiemme_terme=(1-ALPHA)*unsurN;
+    float deuxiemme_terme=(1-ALPHA)*unsurN;// penser a mettre 1-alpha en param pour ne pas le calculer a chaque fois
     float constante=premier_terme+deuxiemme_terme;
     return constante;
 }
 
 
 
-float* addition_deux_vecteurs(float* vecteur1, float* vecteur0, int nbsommet){
-    for(int i=0;i<nbsommet;i++){
+float* addition_deux_vecteurs(float* vecteur1, float* vecteur0, int nbelts){
+    for(int i=0;i<nbelts;i++){
         vecteur1[i]=vecteur1[i]+vecteur0[i];
     }
 }
@@ -204,7 +205,6 @@ float * recherchep(struct contigue* tableauSommets, float *vecteur0,int *vecteur
         for(int i=0;i<Nbsommet;i++){
             vecteurD_Mult1surN_MultAlpha[i]=ALPHA*UnSurN*vecteurD[i];
         }
-    
   
     // printf("first dump:\n");   
     // afficher_vecteur(vecteur0,Nbsommet);
@@ -213,11 +213,27 @@ float * recherchep(struct contigue* tableauSommets, float *vecteur0,int *vecteur
 
 
 
-     multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+    // multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
 
-    // struct contigue * aP=mult_scalair(tableauSommets,ALPHA,Nbsommet);
+     struct contigue * aP=mult_scalair(tableauSommets,ALPHA,Nbvaleurs);
 
-    //  multvectmmat(aP,vecteur0,vecteur1,Nbsommet,Nbvaleurs);
+     multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+    float deuxieme_terme=calculer_cst(vecteur0,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
+
+        for (int i=0;i<Nbsommet;i++){
+            vecteur1[i]=vecteur1[i]+deuxieme_terme;
+        }
+
+        printf("somme:\n");
+        float sum=0;
+        for(int i=0;i<Nbsommet;i++){
+            sum+=vecteur1[i];
+            }
+
+    //    printf("after multiplication:\n");
+    //     afficher_vecteur(vecteur1,Nbsommet);
+    //     afficher_vecteur(vecteur0,Nbsommet);
+    //     sleep(100);
 
     //   float deuxieme_terme=calculer_cst(vecteur0,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
      
@@ -245,21 +261,21 @@ float * recherchep(struct contigue* tableauSommets, float *vecteur0,int *vecteur
         
 
 
-        multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
-       // multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbsommet); avant
+       // multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
 
 
 
 
-        // multvectmmat(aP,vecteur0,vecteur1,Nbsommet,Nbvaleurs);
-        // float deuxieme_terme=calculer_cst(vecteur0,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
+        multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+        float deuxieme_terme=calculer_cst(vecteur1,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
         
-        // for (int i=0;i<Nbsommet;i++){
-        //     vecteur1[i]=vecteur1[i]+deuxieme_terme;
-        // }
+
+        for (int i=0;i<Nbsommet;i++){
+            vecteur1[i]=vecteur1[i]+deuxieme_terme;
+        }
 
 
-
+ 
 
         // printf("vector0:\n");   
         // afficher_vecteur(vecteur0,Nbsommet);
