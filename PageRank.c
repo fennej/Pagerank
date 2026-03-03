@@ -213,7 +213,7 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,int *vecte
     // afficher_vecteur(vecteur1,Nbsommet);    
 
 
-
+        int cpt=0;
     // multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
 
      struct contigue * aP=mult_scalair(tableauSommets,ALPHA,Nbvaleurs);
@@ -222,6 +222,12 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,int *vecte
     //  printf("veteur1 :\n");
     //     afficher_vecteur(vecteur1,Nbsommet);
     double deuxieme_terme=calculer_cst(vecteur0,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
+
+
+    printf("deuxieme terme: %f\n", deuxieme_terme);
+    printf("vector1 avant addition du deuxieme terme:\n");
+    afficher_vecteur(vecteur1,Nbsommet);
+
 
 
         for (int i=0;i<Nbsommet;i++){
@@ -282,7 +288,8 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,int *vecte
         }
 
 
- 
+        cpt++;
+
 
         // printf("vector0:\n");   
         // afficher_vecteur(vecteur0,Nbsommet);
@@ -291,6 +298,13 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,int *vecte
 
         clock_t end = clock();
         printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
+
+        
+        printf("second terme dans la while: %f\n", deuxieme_terme);
+        printf("iteration %d:\n", cpt);
+        printf("vector1 :\n");
+        afficher_vecteur(vecteur1,Nbsommet);
+
 
 
       //  free(temp);
@@ -336,7 +350,7 @@ int *tabD=NULL;
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD);
+struct contigue *tableauSommets = lecturefichier_matrixm("matrix.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 //affichertab(tableauSommets,Nbsommet);
