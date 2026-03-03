@@ -16,6 +16,13 @@ typedef struct successeur{
 const double EPSILON = 0.000001;
 const double ALPHA=0.9;
 
+
+struct tableauD{
+    int *tabD;
+    int Nbsommet;
+};
+
+
 struct resultat{
     int * successeur_sommet;
    struct successeur ** successeur_probabilite;
@@ -29,7 +36,7 @@ struct contigue{
 };
 
 
-struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,int**tabD){
+struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,struct tableauD** tabD){
     FILE* file = fopen(filename, "r");
     if (file == NULL) {
         printf("Erreur ouverture fichier\n");
@@ -53,10 +60,11 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
         nbsuc[i]=0;
      }
 
-     *tabD=malloc(*NbLignes*sizeof(int));
+     (*tabD)->tabD=malloc(*NbLignes*sizeof(int));
      for(int i=0;i<*NbLignes;i++){
-        (*tabD)[i]=1;
+        (*tabD)->tabD[i]=0;
      }
+     (*tabD)->Nbsommet=0;
 
      
     struct contigue *tabcontigue=malloc(*Nbval*sizeof(struct contigue));
@@ -70,7 +78,7 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
         tabcontigue[i].pred=pred;
         tabcontigue[i].suc=suc;
         nbsuc[pred-1]++;
-        (*tabD)[pred-1]=0;
+        
     }
    // affichertab(tableauSommets,*NbLignes);
 
@@ -78,6 +86,10 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
    for(int i=0;i<*NbLignes;i++){
     if(nbsuc[i]>0)
     nbsuc[i]=1.0/nbsuc[i];
+    else{
+        (*tabD)->tabD[(*tabD)->Nbsommet]=i;
+        (*tabD)->Nbsommet++;
+    }
    }
 
 
@@ -156,15 +168,13 @@ for (int i=0;i<nbrdesommet;i++){
 return res;
 }
 
-struct contigue* mult_scalair(struct contigue *tab,double scalair,int nbsommets){
+void mult_scalair(struct contigue *res,struct contigue *tab,double scalair,int Nbvaleurs){
     //pour trouver le alphaP 
-    struct contigue *res=malloc(nbsommets*sizeof(struct contigue));
-    memcpy(res,tab,nbsommets*sizeof(struct contigue));
+    memcpy(res,tab,Nbvaleurs*sizeof(struct contigue));
 
-    for(int i=0;i<nbsommets;i++){
+    for(int i=0;i<Nbvaleurs;i++){
         res[i].probabilite*=scalair;
     }
-    return res;
 }
 
 double * mult_vect_scalair(double *vecteur,double scalair,int nbsommet){
@@ -174,11 +184,19 @@ double * mult_vect_scalair(double *vecteur,double scalair,int nbsommet){
     return vecteur;
 }
 
+double mult_vectligne_vectcol_BIS(double* res, double *vect_ligne,struct tableauD *tabD,double UnSurN_mult_alpha){
+    double sum=0;
+    for(int i =0;i<tabD->Nbsommet;i++){
+        sum+=vect_ligne[tabD->tabD[i]]*UnSurN_mult_alpha;
+    }
+    *res=sum;
+}
 
-
-double calculer_cst(double* veucteur, double* vecteurF_P_ALPHA_unsurn,double unsurN,int nbsommet){
+double calculer_cst(double* veucteur, struct tableauD *tabD,double unsurN,int nbelts){
     /*le resultat sera exris dans vecteur*/
-    double premier_terme=mult_vectligne_vectcol(veucteur,vecteurF_P_ALPHA_unsurn,nbsommet);
+   // double premier_terme=mult_vectligne_vectcol(veucteur,vecteurF_P_ALPHA_unsurn,nbsommet);
+    double premier_terme=0.0;
+    mult_vectligne_vectcol_BIS(&premier_terme,veucteur,tabD,unsurN*ALPHA);
     double deuxiemme_terme=(1-ALPHA)*unsurN;// penser a mettre 1-alpha en param pour ne pas le calculer a chaque fois
     double constante=premier_terme+deuxiemme_terme;
     return constante;
@@ -197,67 +215,34 @@ double* addition_deux_vecteurs(double* vecteur1, double* vecteur0, int nbelts){
 
 
 //le graphe dois etre fortement connexe pour que la recherche de la page rank converge ,,,n'est plus vrai maintenant
-double * recherchep(struct contigue* tableauSommets, double *vecteur0,int *vecteurD, int Nbsommet, int Nbvaleurs) {
+double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tableauD *tabD, int Nbsommet, int Nbvaleurs) {
     double *vecteur1=malloc(Nbsommet*sizeof(double));
     memset(vecteur1, 0, Nbsommet * sizeof(double));
-    double *vecteurD_Mult1surN_MultAlpha=malloc(Nbsommet*sizeof(double));
+    // double *vecteurD_Mult1surN_MultAlpha=malloc(Nbsommet*sizeof(double));
      double UnSurN=1.0/Nbsommet;
+    struct contigue * aP=malloc(Nbvaleurs*sizeof(struct contigue));
 
-        for(int i=0;i<Nbsommet;i++){
-            vecteurD_Mult1surN_MultAlpha[i]=ALPHA*UnSurN*vecteurD[i];
-        }
+
+
+
+
+    // for(int i=0;i<Nbsommet;i++){
+    //     vecteurD_Mult1surN_MultAlpha[i]=ALPHA*UnSurN*vecteurD[i];
+    // }
   
-    // printf("first dump:\n");   
-    // afficher_vecteur(vecteur0,Nbsommet);
-    // printf("vector1:\n");   
-    // afficher_vecteur(vecteur1,Nbsommet);    
 
 
-
-    // multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
-
-     struct contigue * aP=mult_scalair(tableauSommets,ALPHA,Nbvaleurs);
+    mult_scalair(aP,tableauSommets,ALPHA,Nbvaleurs);
 
     multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
-    //  printf("veteur1 :\n");
-    //     afficher_vecteur(vecteur1,Nbsommet);
-    double deuxieme_terme=calculer_cst(vecteur0,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
+
+    double deuxieme_terme=calculer_cst(vecteur0,tabD,UnSurN,Nbsommet);
 
 
-        for (int i=0;i<Nbsommet;i++){
-            vecteur1[i]=vecteur1[i]+deuxieme_terme;
-        }
+    for (int i=0;i<Nbsommet;i++){
+        vecteur1[i]=vecteur1[i]+deuxieme_terme;
+    }
 
-
-        // printf("somme:\n");
-        // double sum=0;
-        // for(int i=0;i<Nbsommet;i++){
-        //     sum+=vecteur1[i];
-        //     }
-        // printf("Somme des elements du vecteur: %f\n", sum);
-
-
-    //    printf("after multiplication:\n");
-    //     afficher_vecteur(vecteur1,Nbsommet);
-    //     afficher_vecteur(vecteur0,Nbsommet);
-    //     sleep(100);
-
-    //   double deuxieme_terme=calculer_cst(vecteur0,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
-     
-    //  for (int i=0;i<Nbsommet;i++){
-    //     vecteur1[i]=vecteur1[i]+deuxieme_terme;
-    //  }
-
-
-
-
-  //  multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbsommet);
-
-    // printf("after first multiplication:\n");
-    // printf("vector0:\n");   
-    // afficher_vecteur(vecteur0,Nbsommet);
-    // printf("vector1:\n");
-    // afficher_vecteur(vecteur1,Nbsommet);    
 
     while (norme_a1(vecteur1,vecteur0,Nbsommet)>EPSILON)
     {
@@ -268,13 +253,8 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,int *vecte
 
 
 
-       // multvectmmat(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
-
-
-
-
         multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
-        double deuxieme_terme=calculer_cst(vecteur0,vecteurD_Mult1surN_MultAlpha,UnSurN,Nbsommet);
+        double deuxieme_terme=calculer_cst(vecteur0,tabD,UnSurN,Nbsommet);
         
 
         for (int i=0;i<Nbsommet;i++){
@@ -282,12 +262,6 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,int *vecte
         }
 
 
- 
-
-        // printf("vector0:\n");   
-        // afficher_vecteur(vecteur0,Nbsommet);
-        // printf("vector1:\n");
-        // afficher_vecteur(vecteur1,Nbsommet);    
 
         clock_t end = clock();
         printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
@@ -302,6 +276,8 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,int *vecte
 
         printf("Somme des elements du vecteur: %.12lf\n", sum);
     }
+
+    
     
     return vecteur1;
 }
@@ -332,7 +308,7 @@ int Nbval=0;
 
 
 /*initialisation du tableu D qui est est ce que la ligne na pas de suc*/
-int *tabD=NULL;
+struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
@@ -459,5 +435,11 @@ for(int chunk = 0; chunk < Nbsommet; chunk += CHUNK_SIZE) {
         vecteur1[i] = ...;
     }
 }*/
+
+
+
+
+
+//quand on veut que une varriable change dans la main on donne un pointeur meme chose pour les structures
     return 0;
 }   
