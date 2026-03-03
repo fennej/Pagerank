@@ -251,15 +251,35 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 
 
     mult_scalair(aP,tableauSommets,ALPHA,Nbvaleurs);
+
+    #pragma omp single
+    {
+    printf("affichage de alphaP:\n");
+    afficher_contigue(aP,Nbvaleurs);
+    }
     multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
 
-
+    #pragma omp single
+    {
+    printf("veteur apres multiplication matrice-vecteur:\n");
+    afficher_vecteur(vecteur1,Nbsommet);
+    }
    
     calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
+
+
 
     #pragma omp for
     for (int i=0;i<Nbsommet;i++){
         vecteur1[i]=vecteur1[i]+deuxieme_terme;
+    }
+
+#pragma omp single
+    {
+        printf("Deuxieme terme: %f\n", deuxieme_terme);
+        printf("Vecteur apres multiplication matrice-vecteur:\n");
+        afficher_vecteur(vecteur1,Nbsommet);
+        sleep(100);
     }
 
 // enlever cette while mettre un test qui sera a faux une fois convergé , donc le test de conv sera un test a l'interrieur 
