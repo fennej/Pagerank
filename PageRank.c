@@ -15,6 +15,7 @@ typedef struct successeur{
 
 const double EPSILON = 0.000001;
 const double ALPHA=0.9;
+double sum=0;
 
 
 struct tableauD{
@@ -129,15 +130,19 @@ void afficher_vecteur(double *vecteur, int Nbsommet) {
 
  void multvectmmat(struct contigue* tableauSommets,double* vecteur1, double *vecteur0, int Nbsommet, int Nbvaleurs) {
     // double *vecteur1=malloc(Nbsommet*sizeof(double));
+    #pragma omp single
     memset(vecteur1, 0, Nbsommet * sizeof(double));
 
-
+    #pragma omp for
     for(int i=0;i<Nbvaleurs;i++){
         double sum=0.0;
         int pred=tableauSommets[i].pred;
         int suc=tableauSommets[i].suc;
         double prob=tableauSommets[i].probabilite;
 
+
+        //atomic        #pragma omp atomic
+        #pragma omp atomic
         vecteur1[suc-1]+=vecteur0[pred-1]*prob;//pas oublier les -1 car les sommets commencent à 1 dans le fichier
 
         
@@ -149,7 +154,7 @@ void afficher_vecteur(double *vecteur, int Nbsommet) {
 
 
 double norme_a1(double *vecteur1, double *vecteur0, int Nbsommet) {
-    double sum=0.0;
+     sum=0.0;
     for(int i=0;i<Nbsommet;i++){
         sum+=fabs(vecteur1[i]-vecteur0[i]);
     }
@@ -170,9 +175,16 @@ return res;
 
 void mult_scalair(struct contigue *res,struct contigue *tab,double scalair,int Nbvaleurs){
     //pour trouver le alphaP 
+
+    //un seul vas la fiare 
+    #pragma omp single
     memcpy(res,tab,Nbvaleurs*sizeof(struct contigue));
 
+    
+    //partge  
+    #pragma omp for
     for(int i=0;i<Nbvaleurs;i++){
+        //atomic pas necessaire on a pas d'access concurent sur les memes elements de res
         res[i].probabilite*=scalair;
     }
 }
@@ -185,21 +197,26 @@ double * mult_vect_scalair(double *vecteur,double scalair,int nbsommet){
 }
 
 double mult_vectligne_vectcol_BIS(double* res, double *vect_ligne,struct tableauD *tabD,double UnSurN_mult_alpha){
-    double sum=0;
+     sum=0.0;
+    #pragma omp for reduction(+:sum)
     for(int i =0;i<tabD->Nbsommet;i++){
         sum+=vect_ligne[tabD->tabD[i]]*UnSurN_mult_alpha;
     }
+   // #pragma omp single il ne faut pas faire le signle car tout les threads doivnet mettre a jour leurs premier terme car on ne sais pas qui vas entrer dans le sigle et calucler la constante 
     *res=sum;
 }
 
-double calculer_cst(double* veucteur, struct tableauD *tabD,double unsurN,int nbelts){
+void calculer_cst(double *res,double* veucteur, struct tableauD *tabD,double unsurN,int nbelts){
     /*le resultat sera exris dans vecteur*/
    // double premier_terme=mult_vectligne_vectcol(veucteur,vecteurF_P_ALPHA_unsurn,nbsommet);
     double premier_terme=0.0;
     mult_vectligne_vectcol_BIS(&premier_terme,veucteur,tabD,unsurN*ALPHA);
+    #pragma omp single
+    {
     double deuxiemme_terme=(1-ALPHA)*unsurN;// penser a mettre 1-alpha en param pour ne pas le calculer a chaque fois
     double constante=premier_terme+deuxiemme_terme;
-    return constante;
+    *res=constante;
+    }
 }
 
 
@@ -221,64 +238,90 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
     // double *vecteurD_Mult1surN_MultAlpha=malloc(Nbsommet*sizeof(double));
      double UnSurN=1.0/Nbsommet;
     struct contigue * aP=malloc(Nbvaleurs*sizeof(struct contigue));
+    int stop=0;
+     double deuxieme_terme=0;
+     clock_t start, end;
+ // pour la reduction puisque on peut pas declarer somme globale une fois en parallel
+
+#pragma omp parallel
+{
 
 
-
-
-
-    // for(int i=0;i<Nbsommet;i++){
-    //     vecteurD_Mult1surN_MultAlpha[i]=ALPHA*UnSurN*vecteurD[i];
-    // }
-  
+    // creation des threads 
 
 
     mult_scalair(aP,tableauSommets,ALPHA,Nbvaleurs);
-
     multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
 
-    double deuxieme_terme=calculer_cst(vecteur0,tabD,UnSurN,Nbsommet);
 
+   
+    calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
 
+    #pragma omp for
     for (int i=0;i<Nbsommet;i++){
         vecteur1[i]=vecteur1[i]+deuxieme_terme;
     }
 
+// enlever cette while mettre un test qui sera a faux une fois convergé , donc le test de conv sera un test a l'interrieur 
 
-    while (norme_a1(vecteur1,vecteur0,Nbsommet)>EPSILON)
+    while (!stop)
     {
-        double *temp = vecteur0;
-        vecteur0 = vecteur1;
-        vecteur1 = temp;
-        clock_t start = clock();
 
+        //single
+        #pragma omp single
+        {
+            double *temp = vecteur0;
+            vecteur0 = vecteur1;
+            vecteur1 = temp;
+             start = clock();
+        }
 
 
         multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
-        double deuxieme_terme=calculer_cst(vecteur0,tabD,UnSurN,Nbsommet);
-        
 
+        #pragma omp single
+        deuxieme_terme=0;
+
+        calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
+        
+        #pragma omp for 
         for (int i=0;i<Nbsommet;i++){
             vecteur1[i]=vecteur1[i]+deuxieme_terme;
         }
 
 
-
-        clock_t end = clock();
-        printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
+        #pragma omp single
+        {
+            end = clock();
+            printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
+        }
 
 
       //  free(temp);
 
-        double sum=0;
+      //reduction  
+      #pragma omp barrier
+        sum=0;
+        #pragma omp for reduction(+:sum)
         for(int i=0;i<Nbsommet;i++){
             sum+=vecteur1[i];
         }
 
+        #pragma omp single 
         printf("Somme des elements du vecteur: %.12lf\n", sum);
+
+
+        #pragma omp single
+        if(norme_a1(vecteur1,vecteur0,Nbsommet)<EPSILON){
+            printf("Convergence atteinte\n");
+
+            stop=1;
+    }
+
     }
 
     
-    
+    }
     return vecteur1;
 }
 
@@ -312,7 +355,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD);
+struct contigue *tableauSommets = lecturefichier_matrixm("matrix.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 //affichertab(tableauSommets,Nbsommet);
