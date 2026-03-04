@@ -13,7 +13,7 @@ typedef struct successeur{
     struct successeur* suivant;
 }*Successeur;
 
-const double EPSILON = 0.000001;
+const double EPSILON = 0.0000001;
 const double ALPHA=0.9;
 double sum=0;
 
@@ -158,6 +158,8 @@ double norme_a1(double *vecteur1, double *vecteur0, int Nbsommet) {
     for(int i=0;i<Nbsommet;i++){
         sum+=fabs(vecteur1[i]-vecteur0[i]);
     }
+
+    printf("Norme L1: %f\n", sum);
     return sum;
 }
 
@@ -197,12 +199,19 @@ double * mult_vect_scalair(double *vecteur,double scalair,int nbsommet){
 }
 
 double mult_vectligne_vectcol_BIS(double* res, double *vect_ligne,struct tableauD *tabD,double UnSurN_mult_alpha){
+    #pragma omp single
      sum=0.0;
     #pragma omp for reduction(+:sum)
     for(int i =0;i<tabD->Nbsommet;i++){
         sum+=vect_ligne[tabD->tabD[i]]*UnSurN_mult_alpha;
     }
    // #pragma omp single il ne faut pas faire le signle car tout les threads doivnet mettre a jour leurs premier terme car on ne sais pas qui vas entrer dans le sigle et calucler la constante 
+    //    #pragma omp single
+    // {
+    //     printf("le vecteur passe en param dans bis est ");
+    //     afficher_vecteur(vect_ligne,6);
+    //     printf("la somme est %f\n", sum);
+    // }
     *res=sum;
 }
 
@@ -215,6 +224,12 @@ void calculer_cst(double *res,double* veucteur, struct tableauD *tabD,double uns
     {
     double deuxiemme_terme=(1-ALPHA)*unsurN;// penser a mettre 1-alpha en param pour ne pas le calculer a chaque fois
     double constante=premier_terme+deuxiemme_terme;
+
+    // printf("je suis dans cst et voici la constante: %f\n", constante);
+
+    // printf("et vioi le vecteur passe en param ");
+    // afficher_vecteur(veucteur,nbelts);
+
     *res=constante;
     }
 }
@@ -224,6 +239,15 @@ void calculer_cst(double *res,double* veucteur, struct tableauD *tabD,double uns
 double* addition_deux_vecteurs(double* vecteur1, double* vecteur0, int nbelts){
     for(int i=0;i<nbelts;i++){
         vecteur1[i]=vecteur1[i]+vecteur0[i];
+    }
+}
+
+
+
+
+void afficher_contigue(struct contigue* tab,int Nbvaleurs){
+    for(int i=0;i<Nbvaleurs;i++){
+        printf("Pred: %d, Suc: %d, Probabilite: %f\n", tab[i].pred, tab[i].suc, tab[i].probabilite);
     }
 }
 
@@ -243,6 +267,10 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
      clock_t start, end;
  // pour la reduction puisque on peut pas declarer somme globale une fois en parallel
 
+ int cpt=0;
+
+
+ omp_set_num_threads(20); 
 #pragma omp parallel
 {
 
@@ -252,18 +280,8 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 
     mult_scalair(aP,tableauSommets,ALPHA,Nbvaleurs);
 
-    #pragma omp single
-    {
-    printf("affichage de alphaP:\n");
-    afficher_contigue(aP,Nbvaleurs);
-    }
     multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
 
-    #pragma omp single
-    {
-    printf("veteur apres multiplication matrice-vecteur:\n");
-    afficher_vecteur(vecteur1,Nbsommet);
-    }
    
     calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
 
@@ -274,13 +292,14 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
         vecteur1[i]=vecteur1[i]+deuxieme_terme;
     }
 
-#pragma omp single
-    {
-        printf("Deuxieme terme: %f\n", deuxieme_terme);
-        printf("Vecteur apres multiplication matrice-vecteur:\n");
-        afficher_vecteur(vecteur1,Nbsommet);
-        sleep(100);
-    }
+    
+
+// #pragma omp single
+//     {
+//         printf("Deuxieme terme: %f\n", deuxieme_terme);
+//         printf("Vecteur apres multiplication matrice-vecteur:\n");
+//         afficher_vecteur(vecteur1,Nbsommet);
+//     }
 
 // enlever cette while mettre un test qui sera a faux une fois convergé , donc le test de conv sera un test a l'interrieur 
 
@@ -296,19 +315,65 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
              start = clock();
         }
 
+//il c'est bien fait swap
+
 
         multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
 
         #pragma omp single
+        {
         deuxieme_terme=0;
+        }
+
+
+    //     #pragma omp single
+    //     printf("Deuxieme terme: %f\n", deuxieme_terme);
+
+
+    //    #pragma omp single
+    //     {
+    //         printf("Vecteur 0 =");
+    //         afficher_vecteur(vecteur0,Nbsommet);
+    //     }
+
 
         calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
+
+
+
+        // #pragma omp single
+        // {
+        //     cpt++;
+        //     printf("vect0\n");
+        //     printf("segond terme: %f\n", deuxieme_terme);
+        //     afficher_vecteur(vecteur0,Nbsommet);
+        //     if(cpt==5){
+        //         sleep(1000);
+        //     }
+        // }
+
+
+        // #pragma omp single
+        // printf("Deuxieme terme: %f\n", deuxieme_terme);
+
+        // #pragma omp single
+        // {
+        // printf("Vecteur apres multiplication matrice-vecteur:\n");
+        // afficher_vecteur(vecteur1,Nbsommet);
+        // }
+
         
         #pragma omp for 
         for (int i=0;i<Nbsommet;i++){
             vecteur1[i]=vecteur1[i]+deuxieme_terme;
         }
 
+
+        // #pragma omp single
+        // {
+        // printf("Vecteur apres addition du deuxieme terme:\n");
+        // afficher_vecteur(vecteur1,Nbsommet);
+        // }
 
         #pragma omp single
         {
@@ -321,14 +386,22 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 
       //reduction  
       #pragma omp barrier
+      #pragma omp single
+      {
         sum=0;
+       } 
         #pragma omp for reduction(+:sum)
         for(int i=0;i<Nbsommet;i++){
             sum+=vecteur1[i];
         }
 
         #pragma omp single 
+        {
         printf("Somme des elements du vecteur: %.12lf\n", sum);
+            cpt++;
+
+        }
+        
 
 
         #pragma omp single
@@ -343,15 +416,6 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
     
     }
     return vecteur1;
-}
-
-
-
-
-void afficher_contigue(struct contigue* tab,int Nbvaleurs){
-    for(int i=0;i<Nbvaleurs;i++){
-        printf("Pred: %d, Suc: %d, Probabilite: %f\n", tab[i].pred, tab[i].suc, tab[i].probabilite);
-    }
 }
 
 
@@ -375,7 +439,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("matrix.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD);
+struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 //affichertab(tableauSommets,Nbsommet);
@@ -403,8 +467,25 @@ double *vecteur0=malloc(Nbsommet*sizeof(double));
     printf("Somme des elements du vecteur: %.9lf\n", sum);
 
 
+    printf("vercteur pi  mult");
+        int i=0;
+        while(i<10){
+            if(vecteur0[i]>0){
+                printf("%.10lf\n", vecteur0[i]);
+            }
+            i++;
+        }
+
     free(vecteur0);
     free(tableauSommets);
+
+        printf("fini\n");
+        fflush(stdout);
+
+
+
+
+        
 /*POUR LE OFRMAT TXT*/
 /*   
 //struct resultat *res = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval);
@@ -498,7 +579,6 @@ for(int chunk = 0; chunk < Nbsommet; chunk += CHUNK_SIZE) {
         vecteur1[i] = ...;
     }
 }*/
-
 
 
 
