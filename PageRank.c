@@ -13,10 +13,10 @@ typedef struct successeur{
     struct successeur* suivant;
 }*Successeur;
 
-const double EPSILON = 0.0000001;
-const double ALPHA=0.9;
+ double EPSILON = 0.0000001;
+ double ALPHA=0.9;
 double sum=0;
-
+ int NUM_THREADS=30;
 
 struct tableauD{
     int *tabD;
@@ -159,7 +159,7 @@ double norme_a1(double *vecteur1, double *vecteur0, int Nbsommet) {
         sum+=fabs(vecteur1[i]-vecteur0[i]);
     }
 
-    printf("Norme L1: %f\n", sum);
+   // printf("Norme L1: %f\n", sum);
     return sum;
 }
 
@@ -270,10 +270,11 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
  int cpt=0;
 
 
- omp_set_num_threads(20); 
+ omp_set_num_threads(NUM_THREADS); 
 #pragma omp parallel
 {
-
+    #pragma omp single
+    NUM_THREADS=omp_get_num_threads();
 
     // creation des threads 
 
@@ -312,7 +313,7 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
             double *temp = vecteur0;
             vecteur0 = vecteur1;
             vecteur1 = temp;
-             start = clock();
+            //  start = clock();
         }
 
 //il c'est bien fait swap
@@ -375,38 +376,38 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
         // afficher_vecteur(vecteur1,Nbsommet);
         // }
 
-        #pragma omp single
-        {
-            end = clock();
-            printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
-        }
+        // #pragma omp single
+        // {
+        //     end = clock();
+        //     printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
+        // }
 
 
       //  free(temp);
 
       //reduction  
-      #pragma omp barrier
-      #pragma omp single
-      {
-        sum=0;
-       } 
-        #pragma omp for reduction(+:sum)
-        for(int i=0;i<Nbsommet;i++){
-            sum+=vecteur1[i];
-        }
+    //   #pragma omp barrier
+    //   #pragma omp single
+    //   {
+    //     sum=0;
+    //    } 
+    //     #pragma omp for reduction(+:sum)
+    //     for(int i=0;i<Nbsommet;i++){
+    //         sum+=vecteur1[i];
+    //     }
 
-        #pragma omp single 
-        {
-        printf("Somme des elements du vecteur: %.12lf\n", sum);
-            cpt++;
+    //     #pragma omp single 
+    //     {
+    //     printf("Somme des elements du vecteur: %.12lf\n", sum);
+    //         cpt++;
 
-        }
+    //     }
         
 
 
         #pragma omp single
         if(norme_a1(vecteur1,vecteur0,Nbsommet)<EPSILON){
-            printf("Convergence atteinte\n");
+          //  printf("Convergence atteinte\n");
 
             stop=1;
     }
@@ -415,6 +416,8 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 
     
     }
+    free(aP);       // Libérer aP
+    free(vecteur0); // Libérer l'autre vecteur (celui qu'on ne retourne pas)
     return vecteur1;
 }
 
@@ -434,58 +437,154 @@ int Nbcol=0;
 int Nbval=0;
 
 
+
+
 /*initialisation du tableu D qui est est ce que la ligne na pas de suc*/
 struct tableauD* tabD=malloc(sizeof(struct tableauD));
+
 
 
 /*POUR LE FORMAT MTX*/
 struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
-//affichertab(tableauSommets,Nbsommet);
-double *vecteur0=malloc(Nbsommet*sizeof(double));
-    vecteur0[0]=1;
-    for(int i=1;i<Nbsommet;i++){
-        vecteur0[i]=0;
-    }
 
 
 
-    printf("Vecteur initial:\n");
-
-   // afficher_vecteur(vecteur0,Nbsommet);
-    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
-    printf("PageRank:\n");
-  //  afficher_vecteur(vecteur0,Nbsommet);
-
-    double sum=0;
-    for (int i = 0; i < Nbsommet; i++)
-    {
-        sum+=vecteur0[i];
-    
-    }
-    printf("Somme des elements du vecteur: %.9lf\n", sum);
 
 
-    printf("vercteur pi  mult");
-        int i=0;
-        while(i<10){
-            if(vecteur0[i]>0){
-                printf("%.10lf\n", vecteur0[i]);
-            }
-            i++;
+
+printf("testt");
+double tab_alpha[19];
+for(int i=0; i<19; i++){
+    tab_alpha[i]=0.05*(i+1);  // 0.05, 0.10, ..., 1.0
+}
+double tab_epsilone[10]={1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10};
+
+
+double temps[10][10][10];
+for(int i=0;i<10;i++){
+    for(int j=0;j<10;j++){
+        for(int k=0;k<10;k++){
+            temps[i][j][k]=0;
         }
+    }
+}
 
+FILE*file = fopen("resultats.txt", "w");
+if(file == NULL) {
+    printf("Erreur ouverture fichier resultats.txt\n");
+    return 1;
+}
+setvbuf(file, NULL, _IONBF, 0);  // Pas de buffer, écriture immédiate
+
+fprintf(file, "alpha, epsilon, num_threads, temps_execution\n");
+fprintf(file, "varriation pour le alpha \n");
+
+for(int j=0;j<18;j++){
+    ALPHA=tab_alpha[j];
+    
+    double *vecteur0=malloc(Nbsommet*sizeof(double));
+    vecteur0[0]=1;
+    for(int j=1;j<Nbsommet;j++){
+        vecteur0[j]=0;
+    }
+
+
+        double start = omp_get_wtime();  // <-- pas clock()
+    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
+    double end = omp_get_wtime();
+
+
+    double temps_execution = end - start;
+    fprintf(file, "%f, %e, %d, %f\n", ALPHA, EPSILON, NUM_THREADS, temps_execution);
     free(vecteur0);
+}
+
+
+printf("first part done\n");
+sleep(5);
+
+fprintf(file, "\n");
+
+fprintf(file, "varriation pour le alpha & epsilon\n");
+
+for(int i=0;i<10;i++)
+for(int j=0;j<18;j++){
+    ALPHA=tab_alpha[j];
+    EPSILON=tab_epsilone[i];
+
+    double *vecteur0=malloc(Nbsommet*sizeof(double));
+    vecteur0[0]=1;
+    for(int j=1;j<Nbsommet;j++){
+        vecteur0[j]=0;
+    }
+
+
+    double start = omp_get_wtime();
+    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
+    double end = omp_get_wtime();
+
+
+    double temps_execution = end - start;
+    fprintf(file, "%f, %e, %d, %f\n", ALPHA, EPSILON, NUM_THREADS, temps_execution);
+    free(vecteur0);
+}
+
+printf("second part done\n");
+sleep(5);
+
+fprintf(file, "\n");
+
+fprintf(file, "varriation pour le  epsilon \n");
+
+ALPHA=0.9;
+for(int j=0;j<10;j++){
+    EPSILON=tab_epsilone[j];
+
+    double *vecteur0=malloc(Nbsommet*sizeof(double));
+    vecteur0[0]=1;
+    for(int j=1;j<Nbsommet;j++){
+        vecteur0[j]=0;
+    }
+
+
+    double start = omp_get_wtime();
+    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
+    double end = omp_get_wtime();
+
+
+    double temps_execution = end - start;
+    fprintf(file, "%f, %e, %d, %f\n", ALPHA, EPSILON, NUM_THREADS, temps_execution);
+    free(vecteur0);
+}
+
+
+printf("third part done\n");
+
+    fclose(file);
     free(tableauSommets);
-
-        printf("fini\n");
-        fflush(stdout);
-
+    free(tabD->tabD);
+    free(tabD);
 
 
 
-        
+
+//affichertab(tableauSommets,Nbsommet);
+// double *vecteur0=malloc(Nbsommet*sizeof(double));
+//     vecteur0[0]=1;
+//     for(int i=1;i<Nbsommet;i++){
+//         vecteur0[i]=0;
+//     }
+
+
+//     vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
+
+//     fclose(file);
+//     free(vecteur0);
+//     free(tableauSommets);
+
+
 /*POUR LE OFRMAT TXT*/
 /*   
 //struct resultat *res = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval);
