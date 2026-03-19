@@ -103,6 +103,7 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
 
 
 
+
 void afficherliste(Successeur s){
     while(s!=NULL){
         printf("Sommet: %d, Probabilite: %f\n", s->sommet, s->probabilite);
