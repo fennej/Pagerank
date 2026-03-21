@@ -36,6 +36,30 @@ struct contigue{
     double probabilite;
 };
 
+struct list_chainne_de_sommet{
+    int sommet; 
+    struct list_chainne_de_sommet* suiv;
+}; 
+
+
+struct tableau_liste_chainne{
+    struct list_chainne_de_sommet** tab;
+    int Nbsommet;
+};
+
+
+
+void sup_aretes(float proba_minimale,struct contigue* tab,int Nbvaleurs){
+    for(int i=0;i<Nbvaleurs;i++){
+        if(tab[i].probabilite<proba_minimale){
+            tab[i].probabilite=0;
+        }
+    }
+}
+
+
+
+
 
 struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,struct tableauD** tabD){
     FILE* file = fopen(filename, "r");
@@ -104,6 +128,7 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
 
 
 
+
 void afficherliste(Successeur s){
     while(s!=NULL){
         printf("Sommet: %d, Probabilite: %f\n", s->sommet, s->probabilite);
@@ -163,6 +188,7 @@ double norme_a1(double *vecteur1, double *vecteur0, int Nbsommet) {
    // printf("Norme L1: %f\n", sum);
     return sum;
 }
+
 
 
 
@@ -253,11 +279,123 @@ void afficher_contigue(struct contigue* tab,int Nbvaleurs){
 }
 
 
+//creation de la liste
+struct list_chainne_de_sommet* creer_liste(int sommet){
+    struct list_chainne_de_sommet* nouvelle_liste=malloc(sizeof(struct list_chainne_de_sommet));
+    nouvelle_liste->sommet=sommet;
+    nouvelle_liste->suiv=NULL;
+    return nouvelle_liste;
+}
+
+
+//enlever un sommet
+struct list_chainne_de_sommet* pop(struct list_chainne_de_sommet* liste){
+    if(liste==NULL){
+        return NULL;
+    }
+    struct list_chainne_de_sommet* temp=liste;
+    liste=liste->suiv;
+    free(temp);
+    return liste;
+}
+
+//rend le premier sommet sa valeurs
+int peek(struct list_chainne_de_sommet* list){
+    if(list==NULL){
+        return -1; // ou une autre valeur pour indiquer que la liste est vide
+    }
+    return list->sommet;
+}
+
+//ajouter un nouveau sommet dans la stack 
+struct list_chainne_de_sommet* stack(struct list_chainne_de_sommet* liste,int sommet){
+    struct list_chainne_de_sommet* temp=creer_liste(sommet);
+    temp->suiv=liste;
+    liste=temp;
+    return liste;
+}
+
+
+//cette fonction rend -1 si tout le les sommets on ete visité , et retourne le prochain sommet a visiter sinon
+int tout_visité(int *tab,int n){
+    int i=0;
+
+
+    while(i<n && tab[i]!=-1){
+        i++;
+    }
+
+
+    if(i<n){
+        return i;
+    }
+    else return -1;
+}
+
+
+void kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne graph_pred, int nbsommets){
+    //cration de la liste visité
+    int* visited=malloc(nbsommets*sizeof(int));
+    memcpy(visited,-1,nbsommets*sizeof(int));
+    //creation de la stack
+    struct list_chainne_de_sommet* stack_visited=NULL;
+    struct list_chainne_de_sommet* stack_iterations=NULL;
+    //paroucr en largeur
+    int cfc_counter=-1;// pour pouvoir l'incrementer en suite dans la premiere while et que ca fasse 0
+    int sommet_courant=0;
+    stack_iterations=stack(stack_iterations,sommet_courant);
+    struct list_chainne_de_sommet* successeur=NULL;
+    int predecesseurs;//est utilise dans la deuxiemme partie de cette algo 
+
+    int c=0;
+
+
+    while( ( c=tout_visité(visited,nbsommets))!=-1){
+        stack_visited=stack(stack_visited,c);
+        cfc_counter++;
+        sommet_courant=c;
+    while(stack_iterations!=NULL){
+        //dans la stack du paroucr en profondeur on prends le sommet actuelle et on ajoute au visité
+        sommet_courant=peek(stack_iterations);
+
+        visited[sommet_courant]=0;
+        successeur=graph.tab[sommet_courant];
+
+        //rechercher le prochain successeur non visitééé
+        while(visited[successeur->sommet]==-1&&visited!=NULL){
+            successeur=successeur->suiv;
+        }
+        
+        //on a soit un sommet qui a des successeurs non visité au quelle on vas les parcourire donc on continue le DFS
+        //sinon on pop dans la stack des des iterations pour ne pas faire un algo recurcif ...
+        if(successeur!=NULL){
+            stack_visited = stack(stack_visited,successeur->sommet);
+        }else{
+            stack_visited = pop(stack_visited);
+        }
+    }
+}
+
+    memcpy(visited,-1,nbsommets*sizeof(int));
+
+    while(stack_visited!=NULL){
+        while(visited[peek(stack_visited)]){
+            stack_visited=pop(stack_visited);
+        }
+
+        cfc_counter++;
+
+        sommet_courant=peek(stack_visited);
+        visited[sommet_courant]=-cfc_counter;
+        int predecesseurs=graph_pred.tab[sommet_courant];
+
+    }
+    
+}
 
 
 
-//le graphe dois etre fortement connexe pour que la recherche de la page rank converge ,,,n'est plus vrai maintenant
-double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tableauD *tabD, int Nbsommet, int Nbvaleurs) {
+double * recherchep_dd(struct contigue* tableauSommets, double *vecteur0,struct tableauD *tabD, int Nbsommet, int Nbvaleurs,int *nbiter) {
     double *vecteur1=malloc(Nbsommet*sizeof(double));
     memset(vecteur1, 0, Nbsommet * sizeof(double));
     // double *vecteurD_Mult1surN_MultAlpha=malloc(Nbsommet*sizeof(double));
@@ -269,7 +407,7 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
  // pour la reduction puisque on peut pas declarer somme globale une fois en parallel
 
  int cpt=0;
-
+ nbiter=0;
 
  omp_set_num_threads(NUM_THREADS); 
 #pragma omp parallel
@@ -277,6 +415,183 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
     #pragma omp single
     NUM_THREADS=omp_get_num_threads();
 
+    #pragma omp single nowait
+    {
+        nbiter++;
+    }
+    // creation des threads 
+
+
+    mult_scalair(aP,tableauSommets,ALPHA,Nbvaleurs);
+
+    multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+
+   
+    calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
+
+
+
+    #pragma omp for
+    for (int i=0;i<Nbsommet;i++){
+        vecteur1[i]=vecteur1[i]+deuxieme_terme;
+    }
+
+    
+
+// #pragma omp single
+//     {
+//         printf("Deuxieme terme: %f\n", deuxieme_terme);
+//         printf("Vecteur apres multiplication matrice-vecteur:\n");
+//         afficher_vecteur(vecteur1,Nbsommet);
+//     }
+
+// enlever cette while mettre un test qui sera a faux une fois convergé , donc le test de conv sera un test a l'interrieur 
+
+    while (!stop)
+    {
+
+        //single
+        #pragma omp single
+        {
+            double *temp = vecteur0;
+            vecteur0 = vecteur1;
+            vecteur1 = temp;
+            //  start = clock();
+        }
+
+//il c'est bien fait swap
+
+
+        multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+
+        #pragma omp single
+        {
+        deuxieme_terme=0;
+        }
+
+
+    //     #pragma omp single
+    //     printf("Deuxieme terme: %f\n", deuxieme_terme);
+
+
+    //    #pragma omp single
+    //     {
+    //         printf("Vecteur 0 =");
+    //         afficher_vecteur(vecteur0,Nbsommet);
+    //     }
+
+
+        calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
+
+
+
+        // #pragma omp single
+        // {
+        //     cpt++;
+        //     printf("vect0\n");
+        //     printf("segond terme: %f\n", deuxieme_terme);
+        //     afficher_vecteur(vecteur0,Nbsommet);
+        //     if(cpt==5){
+        //         sleep(1000);
+        //     }
+        // }
+
+
+        // #pragma omp single
+        // printf("Deuxieme terme: %f\n", deuxieme_terme);
+
+        // #pragma omp single
+        // {
+        // printf("Vecteur apres multiplication matrice-vecteur:\n");
+        // afficher_vecteur(vecteur1,Nbsommet);
+        // }
+
+        
+        #pragma omp for 
+        for (int i=0;i<Nbsommet;i++){
+            vecteur1[i]=vecteur1[i]+deuxieme_terme;
+        }
+
+
+        // #pragma omp single
+        // {
+        // printf("Vecteur apres addition du deuxieme terme:\n");
+        // afficher_vecteur(vecteur1,Nbsommet);
+        // }
+
+        // #pragma omp single
+        // {
+        //     end = clock();
+        //     printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
+        // }
+
+
+      //  free(temp);
+
+      //reduction  
+    //   #pragma omp barrier
+    //   #pragma omp single
+    //   {
+    //     sum=0;
+    //    } 
+    //     #pragma omp for reduction(+:sum)
+    //     for(int i=0;i<Nbsommet;i++){
+    //         sum+=vecteur1[i];
+    //     }
+
+    //     #pragma omp single 
+    //     {
+    //     printf("Somme des elements du vecteur: %.12lf\n", sum);
+    //         cpt++;
+
+    //     }
+        
+
+
+        #pragma omp single
+        if(norme_a1(vecteur1,vecteur0,Nbsommet)<EPSILON){
+          //  printf("Convergence atteinte\n");
+
+            stop=1;
+    }
+
+    }
+
+    
+    }
+    free(aP);       // Libérer aP
+    free(vecteur0); // Libérer l'autre vecteur (celui qu'on ne retourne pas)
+    return vecteur1;
+}
+
+
+
+
+//le graphe dois etre fortement connexe pour que la recherche de la page rank converge ,,,n'est plus vrai maintenant
+double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tableauD *tabD, int Nbsommet, int Nbvaleurs,int *nbiter) {
+    double *vecteur1=malloc(Nbsommet*sizeof(double));
+    memset(vecteur1, 0, Nbsommet * sizeof(double));
+    // double *vecteurD_Mult1surN_MultAlpha=malloc(Nbsommet*sizeof(double));
+     double UnSurN=1.0/Nbsommet;
+    struct contigue * aP=malloc(Nbvaleurs*sizeof(struct contigue));
+    int stop=0;
+     double deuxieme_terme=0;
+     clock_t start, end;
+ // pour la reduction puisque on peut pas declarer somme globale une fois en parallel
+
+ int cpt=0;
+ nbiter=0;
+
+ omp_set_num_threads(NUM_THREADS); 
+#pragma omp parallel
+{
+    #pragma omp single
+    NUM_THREADS=omp_get_num_threads();
+
+    #pragma omp single nowait
+    {
+        nbiter++;
+    }
     // creation des threads 
 
 
@@ -490,10 +805,9 @@ for(int j=0;j<18;j++){
     for(int j=1;j<Nbsommet;j++){
         vecteur0[j]=0;
     }
-
-
+    int nbiter=0;
         double start = omp_get_wtime();  // <-- pas clock()
-    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
+    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
     double end = omp_get_wtime();
 
 
@@ -508,32 +822,32 @@ sleep(5);
 
 fprintf(file, "\n");
 
-fprintf(file, "varriation pour le alpha & epsilon\n");
+// fprintf(file, "varriation pour le alpha & epsilon\n");
 
-for(int i=0;i<10;i++)
-for(int j=0;j<18;j++){
-    ALPHA=tab_alpha[j];
-    EPSILON=tab_epsilone[i];
+// for(int i=0;i<10;i++)
+// for(int j=0;j<18;j++){
+//     ALPHA=tab_alpha[j];
+//     EPSILON=tab_epsilone[i];
 
-    double *vecteur0=malloc(Nbsommet*sizeof(double));
-    vecteur0[0]=1;
-    for(int j=1;j<Nbsommet;j++){
-        vecteur0[j]=0;
-    }
-
-
-    double start = omp_get_wtime();
-    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
-    double end = omp_get_wtime();
+//     double *vecteur0=malloc(Nbsommet*sizeof(double));
+//     vecteur0[0]=1;
+//     for(int j=1;j<Nbsommet;j++){
+//         vecteur0[j]=0;
+//     }
 
 
-    double temps_execution = end - start;
-    fprintf(file, "%f, %e, %d, %f\n", ALPHA, EPSILON, NUM_THREADS, temps_execution);
-    free(vecteur0);
-}
+//     double start = omp_get_wtime();
+//     vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
+//     double end = omp_get_wtime();
 
-printf("second part done\n");
-sleep(5);
+
+//     double temps_execution = end - start;
+//     fprintf(file, "%f, %e, %d, %f\n", ALPHA, EPSILON, NUM_THREADS, temps_execution);
+//     free(vecteur0);
+// }
+
+// printf("second part done\n");
+// sleep(5);
 
 fprintf(file, "\n");
 
@@ -549,9 +863,9 @@ for(int j=0;j<10;j++){
         vecteur0[j]=0;
     }
 
-
+    int nbiter=0;
     double start = omp_get_wtime();
-    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
+    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
     double end = omp_get_wtime();
 
 
