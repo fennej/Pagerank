@@ -61,12 +61,14 @@ void sup_aretes(float proba_minimale,struct contigue* tab,int Nbvaleurs){
 
 
 
-struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,struct tableauD** tabD){
+struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,struct tableauD** tabD,struct tableau_liste_chainne* graphe_suc,struct tableau_liste_chainne* graphe_pred){
     FILE* file = fopen(filename, "r");
     if (file == NULL) {
         printf("Erreur ouverture fichier\n");
         return NULL;
     }
+
+
 
 
     char buffer[100];
@@ -93,12 +95,22 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
 
      
     struct contigue *tabcontigue=malloc(*Nbval*sizeof(struct contigue));
+    (*graphe_suc).tab=malloc(*Nbcol*sizeof(struct list_chainne_de_sommet*));
+    (*graphe_pred).tab=malloc(*Nbcol*sizeof(struct list_chainne_de_sommet*));
+
+     for(int i=0;i<*Nbcol;i++){
+        graphe_pred->tab[i]=NULL;
+        graphe_suc->tab[i]=NULL;
+     }
+
 
 
         for(int i=0;i<*Nbval;i++){
         int pred=0,suc=0;
         
         fscanf(file, "%d %d", &pred, &suc);
+        graphe_suc->tab[pred-1]=stack(graphe_suc->tab[pred-1],suc); //ici stack joue le role de inser tete 
+        graphe_pred->tab[suc-1]=stack(graphe_pred->tab[suc-1],pred);
 
         tabcontigue[i].pred=pred;
         tabcontigue[i].suc=suc;
@@ -317,17 +329,14 @@ struct list_chainne_de_sommet* stack(struct list_chainne_de_sommet* liste,int so
 
 
 //cette fonction rend -1 si tout le les sommets on ete visité , et retourne le prochain sommet a visiter sinon
-int tout_visité(int *tab,int n){
-    int i=0;
-
-
-    while(i<n && tab[i]!=-1){
-        i++;
+int tout_visité(int *tab,int n,int *depart){
+    while(*depart<n && tab[*depart]!=-1){
+        (*depart)++;
     }
 
 
-    if(i<n){
-        return i;
+    if((*depart)<n){
+        return *depart;
     }
     else return -1;
 }
@@ -360,9 +369,9 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     int predecesseurs;//est utilise dans la deuxiemme partie de cette algo 
 
     int c=0;
+    int index_visited=0;
 
-
-    while( ( c=tout_visité(visited,nbsommets))!=-1){
+    while( ( c=tout_visité(visited,nbsommets,&index_visited))!=-1){
         stack_iterations=stack(stack_iterations,c);
         sommet_courant=c;
     while(stack_iterations!=NULL){
@@ -791,6 +800,15 @@ int Nbval=0;
 
 
 
+struct tableau_liste_chainne graph_suc;
+graph_suc.Nbsommet=0;
+graph_suc.tab=NULL;
+struct tableau_liste_chainne graph_pred;
+graph_pred.Nbsommet=0;
+graph_pred.tab=NULL;
+
+
+
 
 /*initialisation du tableu D qui est est ce que la ligne na pas de suc*/
 struct tableauD* tabD=malloc(sizeof(struct tableauD));
@@ -798,7 +816,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD);
+struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 
