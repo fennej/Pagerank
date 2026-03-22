@@ -48,6 +48,9 @@ struct tableau_liste_chainne{
 };
 
 
+// à ajouter en haut du fichier, avant lecturefichier_matrixm
+struct list_chainne_de_sommet* stack(struct list_chainne_de_sommet* liste, int sommet);
+
 
 void sup_aretes(float proba_minimale,struct contigue* tab,int Nbvaleurs){
     for(int i=0;i<Nbvaleurs;i++){
@@ -102,7 +105,9 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
         graphe_pred->tab[i]=NULL;
         graphe_suc->tab[i]=NULL;
      }
+     graphe_pred->Nbsommet=*Nbcol;
 
+     graphe_suc->Nbsommet=*Nbcol;
 
 
         for(int i=0;i<*Nbval;i++){
@@ -328,8 +333,9 @@ struct list_chainne_de_sommet* stack(struct list_chainne_de_sommet* liste,int so
 }
 
 
-//cette fonction rend -1 si tout le les sommets on ete visité , et retourne le prochain sommet a visiter sinon
-int tout_visité(int *tab,int n,int *depart){
+//cette fonction rend -1 si tout le les sommets on ete visite , et retourne le prochain sommet a visiter sinon
+//elle rend l'index et non le sommet index =sommet -1
+int tout_visite(int *tab,int n,int *depart){
     while(*depart<n && tab[*depart]!=-1){
         (*depart)++;
     }
@@ -355,6 +361,15 @@ void libmemstack(struct list_chainne_de_sommet **liste){
 
 }
 
+
+void afficher_liste_chainne(struct list_chainne_de_sommet *liste){
+    while(liste!=NULL){
+        printf("%d \n",liste->sommet);
+        liste=liste->suiv;
+    }
+}
+
+
 int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne graph_pred, int nbsommets){
     //cration de la liste visité
     int* visited=malloc(nbsommets*sizeof(int));
@@ -371,10 +386,17 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     int c=0;
     int index_visited=0;
 
-    while( ( c=tout_visité(visited,nbsommets,&index_visited))!=-1){
+    while( ( c=tout_visite(visited,nbsommets,&index_visited))!=-1){
         stack_iterations=stack(stack_iterations,c);
         sommet_courant=c;
+        printf("le sommet courant est %d",sommet_courant);
+        //sleep(5);
     while(stack_iterations!=NULL){
+        printf("les iterations\n");
+        afficher_liste_chainne(stack_iterations);
+       // sleep(7);
+
+
         //dans la stack du paroucr en profondeur on prends le sommet actuelle et on ajoute au visité
         sommet_courant=peek(stack_iterations);
 
@@ -382,14 +404,14 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
         successeur=graph.tab[sommet_courant];
 
         //rechercher le prochain successeur non visitééé
-        while(successeur!=NULL&&visited[successeur->sommet]!=-1){
+        while(successeur!=NULL&&visited[successeur->sommet-1]!=-1){
             successeur=successeur->suiv;
         }
         
         //on a soit un sommet qui a des successeurs non visité au quelle on vas les parcourire donc on continue le DFS
         //sinon on pop dans la stack des des iterations pour ne pas faire un algo recurcif ...
         if(successeur!=NULL){
-            stack_iterations = stack(stack_iterations,successeur->sommet);
+            stack_iterations = stack(stack_iterations,successeur->sommet-1);
         }else{
             stack_visited=stack(stack_visited,sommet_courant);
             stack_iterations = pop(stack_iterations);
@@ -399,33 +421,55 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
 
     memset(visited,-1,nbsommets*sizeof(int));
 
+
+
+    printf("=========affichage de visited==========\n");
+    afficher_liste_chainne(stack_visited);    
+
     while(stack_visited!=NULL){
 
         while(stack_visited!=NULL&&visited[peek(stack_visited)]!=-1){
             stack_visited=pop(stack_visited);
         }
-
-
-        if(stack_visited!=NULL){
-
-            stack_iterations=stack(stack_iterations,peek(stack_visited));
-            stack_visited=pop(stack_visited);
             cfc_counter++;
 
+        if(stack_visited!=NULL){
+            stack_iterations=stack(stack_iterations,peek(stack_visited));
+            stack_visited=pop(stack_visited);
+
+
             while(stack_iterations!=NULL){
+
+
+
                 sommet_courant=peek(stack_iterations);
                 visited[sommet_courant]=cfc_counter;
                 successeur=graph_pred.tab[sommet_courant];
 
-                while(successeur!=NULL&&visited[successeur->sommet]!=-1){
+                printf("cfc counter est %d\n",cfc_counter);
+                printf("le sommet courant:%d\n",sommet_courant);
+                printf("les iterations :\n");
+                afficher_liste_chainne(stack_iterations);
+
+                sleep(8);
+
+                while(successeur!=NULL&&visited[successeur->sommet-1]!=-1){
                     successeur=successeur->suiv;
                 }
+                
+       
 
-
-
+                // printf("etat de suc \n");
+                // if(successeur==NULL){
+                //     printf("alerete:");
+                // }else{
+                //     printf("successur valeur %d",successeur->sommet);
+                // }
 
                 if(successeur!=NULL){
-                    stack_iterations = stack(stack_iterations,successeur->sommet);
+
+                    //printf("la stack it vas ietre mis a jour \n la valeur insere est :%d\n",successeur->sommet-1);
+                    stack_iterations = stack(stack_iterations,successeur->sommet-1);
                 }else{
                     stack_iterations = pop(stack_iterations);
                 }
@@ -610,6 +654,16 @@ double * recherchep_dd(struct contigue* tableauSommets, double *vecteur0,struct 
     return vecteur1;
 }
 
+
+void afficher_graph_suc_pred(struct tableau_liste_chainne tab){
+    for(int i=0;i<tab.Nbsommet;i++){
+        struct list_chainne_de_sommet*temp=tab.tab[i];
+        while(temp!=NULL){
+            printf("sommet %d, -> %d\n",i+1,temp->sommet);
+            temp=temp->suiv;
+        }
+    }
+}
 
 
 
@@ -816,7 +870,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
+struct contigue *tableauSommets = lecturefichier_matrixm("matrix.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 
@@ -825,74 +879,68 @@ Nbsommet=Nblignes;
 
 
 
-printf("testt");
-double tab_alpha[19];
-for(int i=0; i<19; i++){
-    tab_alpha[i]=0.05*(i+1);  // 0.05, 0.10, ..., 1.0
-}
-double tab_epsilone[10]={1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10};
 
 
-double temps[10][10][10];
-for(int i=0;i<10;i++){
-    for(int j=0;j<10;j++){
-        for(int k=0;k<10;k++){
-            temps[i][j][k]=0;
-        }
-    }
-}
+afficher_graph_suc_pred(graph_suc);
 
-FILE*file = fopen("resultats.txt", "w");
-if(file == NULL) {
-    printf("Erreur ouverture fichier resultats.txt\n");
-    return 1;
-}
-setvbuf(file, NULL, _IONBF, 0);  // Pas de buffer, écriture immédiate
-
-fprintf(file, "alpha, epsilon, num_threads, temps_execution\n");
-fprintf(file, "varriation pour le alpha \n");
-
-for(int j=0;j<18;j++){
-    ALPHA=tab_alpha[j];
-    
-    double *vecteur0=malloc(Nbsommet*sizeof(double));
-    vecteur0[0]=1;
-    for(int j=1;j<Nbsommet;j++){
-        vecteur0[j]=0;
-    }
-    int nbiter=0;
-        double start = omp_get_wtime();  // <-- pas clock()
-    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
-    double end = omp_get_wtime();
+printf("les predecesseurs");
+afficher_graph_suc_pred(graph_pred);
 
 
-    double temps_execution = end - start;
-    fprintf(file, "%f, %e, %d, %f\n", ALPHA, EPSILON, NUM_THREADS, temps_execution);
-    free(vecteur0);
+
+
+
+
+
+int* cfc=kosaraju(graph_suc,graph_pred,Nbsommet);
+
+
+
+for(int i=0;i<Nbsommet;i++){
+    printf("cfc[%d]=%d\n",i,cfc[i]);
 }
 
 
-printf("first part done\n");
-sleep(5);
 
-fprintf(file, "\n");
 
-// fprintf(file, "varriation pour le alpha & epsilon\n");
+// printf("testt");
+// double tab_alpha[19];
+// for(int i=0; i<19; i++){
+//     tab_alpha[i]=0.05*(i+1);  // 0.05, 0.10, ..., 1.0
+// }
+// double tab_epsilone[10]={1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10};
 
-// for(int i=0;i<10;i++)
+
+// double temps[10][10][10];
+// for(int i=0;i<10;i++){
+//     for(int j=0;j<10;j++){
+//         for(int k=0;k<10;k++){
+//             temps[i][j][k]=0;
+//         }
+//     }
+// }
+
+// FILE*file = fopen("resultats.txt", "w");
+// if(file == NULL) {
+//     printf("Erreur ouverture fichier resultats.txt\n");
+//     return 1;
+// }
+// setvbuf(file, NULL, _IONBF, 0);  // Pas de buffer, écriture immédiate
+
+// fprintf(file, "alpha, epsilon, num_threads, temps_execution\n");
+// fprintf(file, "varriation pour le alpha \n");
+
 // for(int j=0;j<18;j++){
 //     ALPHA=tab_alpha[j];
-//     EPSILON=tab_epsilone[i];
-
+    
 //     double *vecteur0=malloc(Nbsommet*sizeof(double));
 //     vecteur0[0]=1;
 //     for(int j=1;j<Nbsommet;j++){
 //         vecteur0[j]=0;
 //     }
-
-
-//     double start = omp_get_wtime();
-//     vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
+//     int nbiter=0;
+//         double start = omp_get_wtime();  // <-- pas clock()
+//     vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
 //     double end = omp_get_wtime();
 
 
@@ -901,38 +949,68 @@ fprintf(file, "\n");
 //     free(vecteur0);
 // }
 
-// printf("second part done\n");
+
+// printf("first part done\n");
 // sleep(5);
 
-fprintf(file, "\n");
+// fprintf(file, "\n");
 
-fprintf(file, "varriation pour le  epsilon \n");
+// // fprintf(file, "varriation pour le alpha & epsilon\n");
 
-ALPHA=0.9;
-for(int j=0;j<10;j++){
-    EPSILON=tab_epsilone[j];
+// // for(int i=0;i<10;i++)
+// // for(int j=0;j<18;j++){
+// //     ALPHA=tab_alpha[j];
+// //     EPSILON=tab_epsilone[i];
 
-    double *vecteur0=malloc(Nbsommet*sizeof(double));
-    vecteur0[0]=1;
-    for(int j=1;j<Nbsommet;j++){
-        vecteur0[j]=0;
-    }
-
-    int nbiter=0;
-    double start = omp_get_wtime();
-    vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
-    double end = omp_get_wtime();
+// //     double *vecteur0=malloc(Nbsommet*sizeof(double));
+// //     vecteur0[0]=1;
+// //     for(int j=1;j<Nbsommet;j++){
+// //         vecteur0[j]=0;
+// //     }
 
 
-    double temps_execution = end - start;
-    fprintf(file, "%f, %e, %d, %f\n", ALPHA, EPSILON, NUM_THREADS, temps_execution);
-    free(vecteur0);
-}
+// //     double start = omp_get_wtime();
+// //     vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval);
+// //     double end = omp_get_wtime();
 
 
-printf("third part done\n");
+// //     double temps_execution = end - start;
+// //     fprintf(file, "%f, %e, %d, %f\n", ALPHA, EPSILON, NUM_THREADS, temps_execution);
+// //     free(vecteur0);
+// // }
 
-    fclose(file);
+// // printf("second part done\n");
+// // sleep(5);
+
+// fprintf(file, "\n");
+
+// fprintf(file, "varriation pour le  epsilon \n");
+
+// ALPHA=0.9;
+// for(int j=0;j<10;j++){
+//     EPSILON=tab_epsilone[j];
+
+//     double *vecteur0=malloc(Nbsommet*sizeof(double));
+//     vecteur0[0]=1;
+//     for(int j=1;j<Nbsommet;j++){
+//         vecteur0[j]=0;
+//     }
+
+//     int nbiter=0;
+//     double start = omp_get_wtime();
+//     vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
+//     double end = omp_get_wtime();
+
+
+//     double temps_execution = end - start;
+//     fprintf(file, "%f, %e, %d, %f\n", ALPHA, EPSILON, NUM_THREADS, temps_execution);
+//     free(vecteur0);
+// }
+
+
+// printf("third part done\n");
+
+   // fclose(file);
     free(tableauSommets);
     free(tabD->tabD);
     free(tabD);
