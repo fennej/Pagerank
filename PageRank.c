@@ -333,17 +333,29 @@ int tout_visité(int *tab,int n){
 }
 
 
-void kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne graph_pred, int nbsommets){
+
+
+void libmemstack(struct list_chainne_de_sommet **liste){
+    struct list_chainne_de_sommet *temp=(*liste);
+
+    while((*liste)!=NULL){
+        (*liste)=(*liste)->suiv;
+        free(temp);
+    }
+    liste=NULL;
+
+}
+
+int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne graph_pred, int nbsommets){
     //cration de la liste visité
     int* visited=malloc(nbsommets*sizeof(int));
-    memcpy(visited,-1,nbsommets*sizeof(int));
+    memset(visited,-1,nbsommets*sizeof(int));
     //creation de la stack
     struct list_chainne_de_sommet* stack_visited=NULL;
     struct list_chainne_de_sommet* stack_iterations=NULL;
     //paroucr en largeur
     int cfc_counter=-1;// pour pouvoir l'incrementer en suite dans la premiere while et que ca fasse 0
     int sommet_courant=0;
-    stack_iterations=stack(stack_iterations,sommet_courant);
     struct list_chainne_de_sommet* successeur=NULL;
     int predecesseurs;//est utilise dans la deuxiemme partie de cette algo 
 
@@ -351,8 +363,7 @@ void kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
 
 
     while( ( c=tout_visité(visited,nbsommets))!=-1){
-        stack_visited=stack(stack_visited,c);
-        cfc_counter++;
+        stack_iterations=stack(stack_iterations,c);
         sommet_courant=c;
     while(stack_iterations!=NULL){
         //dans la stack du paroucr en profondeur on prends le sommet actuelle et on ajoute au visité
@@ -362,35 +373,61 @@ void kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
         successeur=graph.tab[sommet_courant];
 
         //rechercher le prochain successeur non visitééé
-        while(visited[successeur->sommet]==-1&&visited!=NULL){
+        while(successeur!=NULL&&visited[successeur->sommet]!=-1){
             successeur=successeur->suiv;
         }
         
         //on a soit un sommet qui a des successeurs non visité au quelle on vas les parcourire donc on continue le DFS
         //sinon on pop dans la stack des des iterations pour ne pas faire un algo recurcif ...
         if(successeur!=NULL){
-            stack_visited = stack(stack_visited,successeur->sommet);
+            stack_iterations = stack(stack_iterations,successeur->sommet);
         }else{
-            stack_visited = pop(stack_visited);
+            stack_visited=stack(stack_visited,sommet_courant);
+            stack_iterations = pop(stack_iterations);
         }
     }
 }
 
-    memcpy(visited,-1,nbsommets*sizeof(int));
+    memset(visited,-1,nbsommets*sizeof(int));
 
     while(stack_visited!=NULL){
-        while(visited[peek(stack_visited)]){
+
+        while(stack_visited!=NULL&&visited[peek(stack_visited)]!=-1){
             stack_visited=pop(stack_visited);
         }
 
-        cfc_counter++;
 
-        sommet_courant=peek(stack_visited);
-        visited[sommet_courant]=-cfc_counter;
-        int predecesseurs=graph_pred.tab[sommet_courant];
+        if(stack_visited!=NULL){
 
+            stack_iterations=stack(stack_iterations,peek(stack_visited));
+            stack_visited=pop(stack_visited);
+            cfc_counter++;
+
+            while(stack_iterations!=NULL){
+                sommet_courant=peek(stack_iterations);
+                visited[sommet_courant]=cfc_counter;
+                successeur=graph_pred.tab[sommet_courant];
+
+                while(successeur!=NULL&&visited[successeur->sommet]!=-1){
+                    successeur=successeur->suiv;
+                }
+
+
+
+
+                if(successeur!=NULL){
+                    stack_iterations = stack(stack_iterations,successeur->sommet);
+                }else{
+                    stack_iterations = pop(stack_iterations);
+                }
+            }
+
+
+        }
     }
-    
+    libmemstack(&stack_visited);
+    libmemstack(&stack_iterations);
+    return visited;
 }
 
 
