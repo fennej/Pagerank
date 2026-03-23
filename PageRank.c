@@ -38,7 +38,7 @@ struct contigue{
 
 struct list_chainne_de_sommet{
     int sommet; 
-    struct list_chainne_de_sommet* suiv;
+    struct list_chainne_de_sommet* suiv;    //a changer il faut creer une structure pour ne pas recomencer a la recherche ... 
 }; 
 
 
@@ -52,7 +52,7 @@ struct tableau_liste_chainne{
 struct list_chainne_de_sommet* stack(struct list_chainne_de_sommet* liste, int sommet);
 
 
-void sup_aretes(float proba_minimale,struct contigue* tab,int Nbvaleurs){
+void sup_aretes(double proba_minimale,struct contigue* tab,int Nbvaleurs){
     for(int i=0;i<Nbvaleurs;i++){
         if(tab[i].probabilite<proba_minimale){
             tab[i].probabilite=0;
@@ -166,9 +166,29 @@ void affichertab(struct successeur** tableau,int Nbsomments){
 
 void afficher_vecteur(double *vecteur, int Nbsommet) {
     for(int i=0;i<Nbsommet;i++){
-        printf("Sommet %d: %f\n", i+1, vecteur[i]);
+        printf("Sommet %d: %lf\n", i+1, vecteur[i]);
     }
 }
+
+
+
+ void multvectmmat_old_sans_surf(struct contigue* tableauSommets,double* vecteur1, double *vecteur0, int Nbsommet, int Nbvaleurs) {
+    // float *vecteur1=malloc(Nbsommet*sizeof(float));
+    memset(vecteur1, 0, Nbsommet * sizeof(double));
+
+
+    for(int i=0;i<Nbvaleurs;i++){
+        double sum=0.0;
+        int pred=tableauSommets[i].pred;
+        int suc=tableauSommets[i].suc;
+        double prob=tableauSommets[i].probabilite;
+
+        vecteur1[suc-1]+=vecteur0[pred-1]*prob;//pas oublier les -1 car les sommets commencent à 1 dans le fichier
+        
+        
+}
+}
+
 
 
  void multvectmmat(struct contigue* tableauSommets,double* vecteur1, double *vecteur0, int Nbsommet, int Nbvaleurs) {
@@ -370,7 +390,7 @@ void afficher_liste_chainne(struct list_chainne_de_sommet *liste){
 }
 
 
-int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne graph_pred, int nbsommets){
+int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne graph_pred, int nbsommets,int *nbcfc ,int **nb_sommets_par_cfc){
     //cration de la liste visité
     int* visited=malloc(nbsommets*sizeof(int));
     memset(visited,-1,nbsommets*sizeof(int));
@@ -382,6 +402,8 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     int sommet_courant=0;
     struct list_chainne_de_sommet* successeur=NULL;
     int predecesseurs;//est utilise dans la deuxiemme partie de cette algo 
+    *nb_sommets_par_cfc=malloc(nbsommets*sizeof(int));//on ne sais pas combien de cfc on vas trouver donc on alloue pour le pire cas ou chaque sommet est une cfc et on vas desalouer apres;
+    memset(*nb_sommets_par_cfc,0,nbsommets*sizeof(int));
 
     int c=0;
     int index_visited=0;
@@ -389,11 +411,11 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     while( ( c=tout_visite(visited,nbsommets,&index_visited))!=-1){
         stack_iterations=stack(stack_iterations,c);
         sommet_courant=c;
-        printf("le sommet courant est %d",sommet_courant);
+     //   printf("le sommet courant est %d",sommet_courant);
         //sleep(5);
     while(stack_iterations!=NULL){
-        printf("les iterations\n");
-        afficher_liste_chainne(stack_iterations);
+        // printf("les iterations\n");
+        // afficher_liste_chainne(stack_iterations);
        // sleep(7);
 
 
@@ -423,17 +445,18 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
 
 
 
-    printf("=========affichage de visited==========\n");
-    afficher_liste_chainne(stack_visited);    
+    // printf("=========affichage de visited==========\n");
+    // afficher_liste_chainne(stack_visited);    
 
     while(stack_visited!=NULL){
 
         while(stack_visited!=NULL&&visited[peek(stack_visited)]!=-1){
             stack_visited=pop(stack_visited);
         }
-            cfc_counter++;
 
         if(stack_visited!=NULL){
+            cfc_counter++;
+
             stack_iterations=stack(stack_iterations,peek(stack_visited));
             stack_visited=pop(stack_visited);
 
@@ -443,15 +466,18 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
 
 
                 sommet_courant=peek(stack_iterations);
+                if(visited[sommet_courant]==-1)
+                (*nb_sommets_par_cfc)[cfc_counter]++;
                 visited[sommet_courant]=cfc_counter;
                 successeur=graph_pred.tab[sommet_courant];
 
-                printf("cfc counter est %d\n",cfc_counter);
-                printf("le sommet courant:%d\n",sommet_courant);
-                printf("les iterations :\n");
-                afficher_liste_chainne(stack_iterations);
 
-                sleep(8);
+                // printf("cfc counter est %d\n",cfc_counter);
+                // printf("le sommet courant:%d\n",sommet_courant);
+                // printf("les iterations :\n");
+                // afficher_liste_chainne(stack_iterations);
+
+               // sleep(8);
 
                 while(successeur!=NULL&&visited[successeur->sommet-1]!=-1){
                     successeur=successeur->suiv;
@@ -478,181 +504,64 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
 
         }
     }
+
+
+    *nbcfc=cfc_counter+1;
+    (*nb_sommets_par_cfc)=realloc((*nb_sommets_par_cfc),(*nbcfc)*sizeof(int));
     libmemstack(&stack_visited);
     libmemstack(&stack_iterations);
     return visited;
 }
 
 
+double norme_a1_old(double *vecteur1, double *vecteur0, int Nbsommet) {
+    double sum=0.0;
+    for(int i=0;i<Nbsommet;i++){
+        sum+=fabs(vecteur1[i]-vecteur0[i]);
+       // printf("sum=%lf",sum);
+    }
+    return sum;
+}
 
-double * recherchep_dd(struct contigue* tableauSommets, double *vecteur0,struct tableauD *tabD, int Nbsommet, int Nbvaleurs,int *nbiter) {
+
+double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0, int Nbsommet, int Nbvaleurs) {
     double *vecteur1=malloc(Nbsommet*sizeof(double));
     memset(vecteur1, 0, Nbsommet * sizeof(double));
-    // double *vecteurD_Mult1surN_MultAlpha=malloc(Nbsommet*sizeof(double));
-     double UnSurN=1.0/Nbsommet;
-    struct contigue * aP=malloc(Nbvaleurs*sizeof(struct contigue));
-    int stop=0;
-     double deuxieme_terme=0;
-     clock_t start, end;
- // pour la reduction puisque on peut pas declarer somme globale une fois en parallel
 
- int cpt=0;
- nbiter=0;
-
- omp_set_num_threads(NUM_THREADS); 
-#pragma omp parallel
-{
-    #pragma omp single
-    NUM_THREADS=omp_get_num_threads();
-
-    #pragma omp single nowait
-    {
-        nbiter++;
-    }
-    // creation des threads 
-
-
-    mult_scalair(aP,tableauSommets,ALPHA,Nbvaleurs);
-
-    multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
-
-   
-    calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
-
-
-
-    #pragma omp for
-    for (int i=0;i<Nbsommet;i++){
-        vecteur1[i]=vecteur1[i]+deuxieme_terme;
-    }
-
+    multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
     
+    // printf("veucteur0: ");
+    // afficher_vecteur(vecteur0,Nbsommet);
+    // printf("veucteur1: ");
+    // afficher_vecteur(vecteur1,Nbsommet);
 
-// #pragma omp single
-//     {
-//         printf("Deuxieme terme: %f\n", deuxieme_terme);
-//         printf("Vecteur apres multiplication matrice-vecteur:\n");
-//         afficher_vecteur(vecteur1,Nbsommet);
-//     }
-
-// enlever cette while mettre un test qui sera a faux une fois convergé , donc le test de conv sera un test a l'interrieur 
-
-    while (!stop)
+    while (norme_a1_old(vecteur1,vecteur0,Nbsommet)>EPSILON)
     {
 
-        //single
-        #pragma omp single
-        {
-            double *temp = vecteur0;
-            vecteur0 = vecteur1;
-            vecteur1 = temp;
-            //  start = clock();
-        }
+        printf("%lf\n",norme_a1_old(vecteur1,vecteur0,Nbsommet));
 
-//il c'est bien fait swap
-
-
-        multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
-
-        #pragma omp single
-        {
-        deuxieme_terme=0;
-        }
-
-
-    //     #pragma omp single
-    //     printf("Deuxieme terme: %f\n", deuxieme_terme);
-
-
-    //    #pragma omp single
-    //     {
-    //         printf("Vecteur 0 =");
-    //         afficher_vecteur(vecteur0,Nbsommet);
-    //     }
-
-
-        calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
-
-
-
-        // #pragma omp single
-        // {
-        //     cpt++;
-        //     printf("vect0\n");
-        //     printf("segond terme: %f\n", deuxieme_terme);
-        //     afficher_vecteur(vecteur0,Nbsommet);
-        //     if(cpt==5){
-        //         sleep(1000);
-        //     }
-        // }
-
-
-        // #pragma omp single
-        // printf("Deuxieme terme: %f\n", deuxieme_terme);
-
-        // #pragma omp single
-        // {
-        // printf("Vecteur apres multiplication matrice-vecteur:\n");
-        // afficher_vecteur(vecteur1,Nbsommet);
-        // }
-
+        double *temp = vecteur0;
+        vecteur0 = vecteur1;
+        vecteur1 = temp;
+        // clock_t start = clock();
         
-        #pragma omp for 
-        for (int i=0;i<Nbsommet;i++){
-            vecteur1[i]=vecteur1[i]+deuxieme_terme;
+        multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
+
+        // clock_t end = clock();
+        // printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
+
+        double sum=0;
+        for(int i=0;i<Nbsommet;i++){
+            sum+=vecteur1[i];
         }
 
-
-        // #pragma omp single
-        // {
-        // printf("Vecteur apres addition du deuxieme terme:\n");
-        // afficher_vecteur(vecteur1,Nbsommet);
-        // }
-
-        // #pragma omp single
-        // {
-        //     end = clock();
-        //     printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
-        // }
-
-
-      //  free(temp);
-
-      //reduction  
-    //   #pragma omp barrier
-    //   #pragma omp single
-    //   {
-    //     sum=0;
-    //    } 
-    //     #pragma omp for reduction(+:sum)
-    //     for(int i=0;i<Nbsommet;i++){
-    //         sum+=vecteur1[i];
-    //     }
-
-    //     #pragma omp single 
-    //     {
-    //     printf("Somme des elements du vecteur: %.12lf\n", sum);
-    //         cpt++;
-
-    //     }
-        
-
-
-        #pragma omp single
-        if(norme_a1(vecteur1,vecteur0,Nbsommet)<EPSILON){
-          //  printf("Convergence atteinte\n");
-
-            stop=1;
     }
-
-    }
-
-    
-    }
-    free(aP);       // Libérer aP
-    free(vecteur0); // Libérer l'autre vecteur (celui qu'on ne retourne pas)
+    free(vecteur0);
     return vecteur1;
 }
+
+
+
 
 
 void afficher_graph_suc_pred(struct tableau_liste_chainne tab){
@@ -680,7 +589,6 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
  // pour la reduction puisque on peut pas declarer somme globale une fois en parallel
 
  int cpt=0;
- nbiter=0;
 
  omp_set_num_threads(NUM_THREADS); 
 #pragma omp parallel
@@ -690,7 +598,7 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 
     #pragma omp single nowait
     {
-        nbiter++;
+        *nbiter++;
     }
     // creation des threads 
 
@@ -870,7 +778,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("matrix.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
+struct contigue *tableauSommets = lecturefichier_matrixm("Harvard500.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 
@@ -881,26 +789,93 @@ Nbsommet=Nblignes;
 
 
 
-afficher_graph_suc_pred(graph_suc);
+// afficher_graph_suc_pred(graph_suc);
 
-printf("les predecesseurs");
-afficher_graph_suc_pred(graph_pred);
-
-
+// printf("les predecesseurs");
+// afficher_graph_suc_pred(graph_pred);
 
 
 
 
+int nbcfc;// nombre de composantes fortement connexes
+int *nb_sommets_par_cfc;
 
-int* cfc=kosaraju(graph_suc,graph_pred,Nbsommet);
+int* cfc=kosaraju(graph_suc,graph_pred,Nbsommet,&nbcfc,&nb_sommets_par_cfc);//cfc[i] est le numero de la composante fortement connexe du sommet i+1
 
+printf("kosaraju done\n");  
+
+// printf("===le tableau cfc qui contient le numero de la composante fortement connexe de chaque sommet===\n");
+
+//     for(int i=0;i<nbcfc;i++){
+//         printf("le nombre de sommets dans la cfc %d est %d\n",i,nb_sommets_par_cfc[i]);
+//     }
+
+
+
+
+// for(int i=0;i<Nbsommet;i++){
+//     printf("cfc[%d]=%d\n",i,cfc[i]);
+// }
+
+double *vecteur0=malloc(Nbsommet*sizeof(double));
+
+
+int * cfc_trete=malloc(nbcfc*sizeof(double));
+
+memset(cfc_trete,0,nbcfc*sizeof(int));
+
+for(int i=0;i<Nbsommet;i++){
+    int numero_cfc=cfc[i];
+    if(cfc_trete[numero_cfc]==0){
+        cfc_trete[numero_cfc]=1;
+        vecteur0[i]=1;
+    }
+}
+
+//afficher_vecteur(vecteur0,Nbsommet);
+
+vecteur0=recherchep_sans_surf(tableauSommets,vecteur0,Nbsommet,Nbval);
+
+printf("recherche sans surf done\n");
+// printf("===apres la premiere cherche===\n");
+
+// afficher_vecteur(vecteur0,Nbsommet);
+
+
+double sum=0;
+for(int i=0;i<Nbsommet;i++){
+    sum+=vecteur0[i];
+}  
+
+
+// printf("la somme des elements du vecteur0 est %f\n", sum);
+
+// printf("le nombre de cfc est %d\n", nbcfc);
+ 
 
 
 for(int i=0;i<Nbsommet;i++){
-    printf("cfc[%d]=%d\n",i,cfc[i]);
+
+    vecteur0[i]=vecteur0[i]/nbcfc;
 }
+// afficher_vecteur(vecteur0,Nbsommet);
+
+sum=0;
+for(int i=0;i<Nbsommet;i++){
+    sum+=vecteur0[i];
+}   
 
 
+
+printf("la somme des elements du vecteur0 est %f\n", sum);
+
+
+int nbiter=0;
+
+vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
+
+printf("le nombre d'iteration est %d\n", nbiter);  
+printf("le nombre de cfc est %d\n", nbcfc);
 
 
 // printf("testt");
