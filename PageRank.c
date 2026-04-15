@@ -23,6 +23,12 @@ struct tableauD{
     int Nbsommet;
 };
 
+struct neud_sommet_suc_prob{
+    int sommet;
+    int successeur;
+    double probabilite;
+    struct neud_sommet_suc_prob* suivant;
+};
 
 struct resultat{
     int * successeur_sommet;
@@ -389,13 +395,13 @@ void afficher_liste_chainne(struct list_chainne_de_sommet *liste){
     }
 }
 
-
+// dificulté a mettre cette algo en it 
 int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne graph_pred, int nbsommets,int *nbcfc ,int **nb_sommets_par_cfc){
     //cration de la liste visité
     int* visited=malloc(nbsommets*sizeof(int));
     memset(visited,-1,nbsommets*sizeof(int));
     //creation de la stack
-    struct list_chainne_de_sommet* stack_visited=NULL;
+    struct list_chainne_de_sommet* stack_visited=NULL;//la pile qui garde l'ordre de visite de premier dfs 
     struct list_chainne_de_sommet* stack_iterations=NULL;
     //paroucr en largeur
     int cfc_counter=-1;// pour pouvoir l'incrementer en suite dans la premiere while et que ca fasse 0
@@ -408,38 +414,38 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     int c=0;
     int index_visited=0;
 
-    while( ( c=tout_visite(visited,nbsommets,&index_visited))!=-1){
+    while( ( c=tout_visite(visited,nbsommets,&index_visited))!=-1){ 
         stack_iterations=stack(stack_iterations,c);
         sommet_courant=c;
-     //   printf("le sommet courant est %d",sommet_courant);
+        //   printf("le sommet courant est %d",sommet_courant);
         //sleep(5);
-    while(stack_iterations!=NULL){
-        // printf("les iterations\n");
-        // afficher_liste_chainne(stack_iterations);
-       // sleep(7);
+        while(stack_iterations!=NULL){
+            // printf("les iterations\n");
+            // afficher_liste_chainne(stack_iterations);
+            // sleep(7);
 
 
-        //dans la stack du paroucr en profondeur on prends le sommet actuelle et on ajoute au visité
-        sommet_courant=peek(stack_iterations);
+            //dans la stack du paroucr en profondeur on prends le sommet actuelle et on ajoute au visité
+            sommet_courant=peek(stack_iterations);
 
-        visited[sommet_courant]=0;
-        successeur=graph.tab[sommet_courant];
+            visited[sommet_courant]=0;
+            successeur=graph.tab[sommet_courant];
 
-        //rechercher le prochain successeur non visitééé
-        while(successeur!=NULL&&visited[successeur->sommet-1]!=-1){
-            successeur=successeur->suiv;
-        }
-        
-        //on a soit un sommet qui a des successeurs non visité au quelle on vas les parcourire donc on continue le DFS
-        //sinon on pop dans la stack des des iterations pour ne pas faire un algo recurcif ...
-        if(successeur!=NULL){
-            stack_iterations = stack(stack_iterations,successeur->sommet-1);
-        }else{
-            stack_visited=stack(stack_visited,sommet_courant);
-            stack_iterations = pop(stack_iterations);
+            //rechercher le prochain successeur non visitééé
+            while(successeur!=NULL&&visited[successeur->sommet-1]!=-1){
+                successeur=successeur->suiv;
+            }
+            
+            //on a soit un sommet qui a des successeurs non visité au quelle on vas les parcourire donc on continue le DFS
+            //sinon on pop dans la stack des des iterations pour ne pas faire un algo recurcif ...
+            if(successeur!=NULL){
+                stack_iterations = stack(stack_iterations,successeur->sommet-1);
+            }else{
+                stack_visited=stack(stack_visited,sommet_courant);
+                stack_iterations = pop(stack_iterations);
+            }
         }
     }
-}
 
     memset(visited,-1,nbsommets*sizeof(int));
 
@@ -455,12 +461,13 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
         }
 
         if(stack_visited!=NULL){
-            cfc_counter++;
+            cfc_counter++; // on augmente le nombre de cfc trouvé
 
-            stack_iterations=stack(stack_iterations,peek(stack_visited));
+            
+            stack_iterations=stack(stack_iterations,peek(stack_visited));// on a trouve un sommet dans la stack des visités(replis dans la premmière partie) qui n'est pas visite et donc on le met dans la stack du parcour 
             stack_visited=pop(stack_visited);
 
-
+            // la on commance le parcour avec le graphe inversé cad des predecesseurs 
             while(stack_iterations!=NULL){
 
 
@@ -468,7 +475,7 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
                 sommet_courant=peek(stack_iterations);
                 if(visited[sommet_courant]==-1)
                 (*nb_sommets_par_cfc)[cfc_counter]++;
-                visited[sommet_courant]=cfc_counter;
+                visited[sommet_courant]=cfc_counter;//visited prend la valeur du numero de la cfc 
                 successeur=graph_pred.tab[sommet_courant];
 
 
@@ -747,9 +754,74 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 }
 
 
+void transformation_matrice(struct contigue* tableauSommets,int * nbsommet_par_cfc,int* numcfc_du_sommet,int nbcfc,int nbarcs,struct contigue*** resultat1,int** resultat2){
+    
+    // tableau de pointeur sur tableau contigue de sous mat cfc
+    struct neud_sommet_suc_prob **tableau_de_sousmatrice_cfc=malloc(nbcfc*sizeof(struct neud_sommet_suc_prob*));
+
+        for(int i=0;i<nbcfc;i++){
+            tableau_de_sousmatrice_cfc[i]=NULL;
+        }
 
 
+    int * nbarcs_par_cfc=malloc(nbcfc*sizeof(int));
+    memset(nbarcs_par_cfc,0,nbcfc*sizeof(int));
+    //remplisage des sous matrices representé par une lise chainne pour linstant et non un tableau car on 
+    //ne connais pas combien il y a de d'acs dans une cfc 
+    for(int i=0;i<nbarcs;i++){
+        //extraction des informations de la matrice initiale
+        int sommet=tableauSommets[i].pred;
+        int successeur=tableauSommets[i].suc;
+        double probabilite=tableauSommets[i].probabilite;
 
+        //extraction du numero cfc du sommet 
+        int numero_cfc=numcfc_du_sommet[sommet-1];
+
+        //creation + ajout des infs pour le temp 
+        struct neud_sommet_suc_prob * temp=malloc(sizeof(struct neud_sommet_suc_prob));
+        temp->sommet=sommet;
+        temp->successeur=successeur;
+        temp->probabilite=probabilite;
+
+        // l'inser tete dans le tableu de sous matrices 
+        temp->suivant=tableau_de_sousmatrice_cfc[numero_cfc];
+        tableau_de_sousmatrice_cfc[numero_cfc]=temp;
+
+        nbarcs_par_cfc[numero_cfc]++;
+
+    }
+
+
+    struct contigue **tableau_de_sousmatrice_cfc_contigue=malloc(nbcfc*sizeof(struct contigue*));
+
+    for(int i=0;i<nbcfc;i++){
+        tableau_de_sousmatrice_cfc_contigue[i]=malloc(nbarcs_par_cfc[i]*sizeof(struct contigue));
+        
+        struct neud_sommet_suc_prob * temp=tableau_de_sousmatrice_cfc[i];
+
+        for(int j=0;j<nbarcs_par_cfc[i];j++){
+            tableau_de_sousmatrice_cfc_contigue[i][j].pred=temp->sommet;
+            tableau_de_sousmatrice_cfc_contigue[i][j].suc=temp->successeur;
+            tableau_de_sousmatrice_cfc_contigue[i][j].probabilite=temp->probabilite;
+ 
+            temp=temp->suivant;
+        }
+        printf("test");
+    }
+    printf("remplissage des sous matrices fait\n");
+
+
+for (int i=0;i<nbcfc;i++){
+    while(tableau_de_sousmatrice_cfc[i]!=NULL){
+        struct neud_sommet_suc_prob * temp=tableau_de_sousmatrice_cfc[i];
+        tableau_de_sousmatrice_cfc[i]=tableau_de_sousmatrice_cfc[i]->suivant;
+        free(temp);
+    }
+}
+
+*resultat1=tableau_de_sousmatrice_cfc_contigue;
+*resultat2=nbarcs_par_cfc;
+}
 
 
 int main(){
@@ -811,12 +883,19 @@ printf("kosaraju done\n");
 //         printf("le nombre de sommets dans la cfc %d est %d\n",i,nb_sommets_par_cfc[i]);
 //     }
 
+struct contigue **tableau_de_sousmatrice_cfc_contigue;
+int *nbarcs_par_cfc;
+transformation_matrice(tableauSommets,nb_sommets_par_cfc,cfc,nbcfc,Nbval,&tableau_de_sousmatrice_cfc_contigue,&nbarcs_par_cfc);
 
 
+printf("transformation de la matrice faite\n");
 
 // for(int i=0;i<Nbsommet;i++){
 //     printf("cfc[%d]=%d\n",i,cfc[i]);
 // }
+
+
+//on remplis le vecteur 0 tq chaque sommet de cfc resoit 1 
 
 double *vecteur0=malloc(Nbsommet*sizeof(double));
 
@@ -840,6 +919,11 @@ for(int i=0;i<Nbsommet;i++){
 
 printf("la somme des elements du vecteur0 est %f\n", sum);
 printf("elle dois etre egale au nombre de cfc qui est %d\n", nbcfc);
+
+
+
+
+
 
 //afficher_vecteur(vecteur0,Nbsommet);
 
