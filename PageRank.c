@@ -530,6 +530,7 @@ double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,
 
     multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
     
+
     // printf("veucteur0: ");
     // afficher_vecteur(vecteur0,Nbsommet);
     // printf("veucteur1: ");
@@ -778,7 +779,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("Harvard500.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
+struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 
@@ -832,6 +833,14 @@ for(int i=0;i<Nbsommet;i++){
     }
 }
 
+double sum=0;
+for(int i=0;i<Nbsommet;i++){
+    sum+=vecteur0[i];
+}  
+
+printf("la somme des elements du vecteur0 est %f\n", sum);
+printf("elle dois etre egale au nombre de cfc qui est %d\n", nbcfc);
+
 //afficher_vecteur(vecteur0,Nbsommet);
 
 vecteur0=recherchep_sans_surf(tableauSommets,vecteur0,Nbsommet,Nbval);
@@ -842,7 +851,7 @@ printf("recherche sans surf done\n");
 // afficher_vecteur(vecteur0,Nbsommet);
 
 
-double sum=0;
+ sum=0;
 for(int i=0;i<Nbsommet;i++){
     sum+=vecteur0[i];
 }  
@@ -876,6 +885,12 @@ vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
 
 printf("le nombre d'iteration est %d\n", nbiter);  
 printf("le nombre de cfc est %d\n", nbcfc);
+//a faire je dois creer un autre tableau de trie par l'apartencance des sommets a leur cfc en utilisent le nombre de cfc par sommet, 
+// je creer un nouveau tableau contigue 
+//je parcoure une seul fois l'ancien tableau contigue et je remplis le nouveau en utilisant le numero de la cfc de chaque sommet 
+
+
+
 
 
 // printf("testt");
