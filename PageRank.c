@@ -178,11 +178,17 @@ void afficher_vecteur(double *vecteur, int Nbsommet) {
 
 
 
- void multvectmmat_old_sans_surf(struct contigue* tableauSommets,double* vecteur1, double *vecteur0, int Nbsommet_globale, int Nbvaleurs) {
+ void multvectmmat_old_sans_surf(struct contigue* tableauSommets,double* vecteur1, double *vecteur0,int Nbarcs, int Nbsommet, int Nbsommet_globale, int Nbvaleurs) {
     // float *vecteur1=malloc(Nbsommet*sizeof(float));
-    memset(vecteur1, 0, Nbsommet_globale * sizeof(double));
+    memcpy(vecteur1,vecteur0,Nbsommet_globale*sizeof(double));
+    
 
-
+    for(int i=0;i<Nbarcs;i++){
+        int t=tableauSommets[i].suc-1;
+        vecteur1[t]=0;
+    }// ici ce quon fait c'est que on le vecteur 1 dois recevoir une copie du vecteur 0 sauf pour les sommet de la cfc actuelle qu'on dois chercher a calculer la distribution stat 
+    
+    
 
 
     for(int i=0;i<Nbvaleurs;i++){
@@ -229,7 +235,7 @@ double norme_a1(double *vecteur1, double *vecteur0, int Nbsommet) {
         sum+=fabs(vecteur1[i]-vecteur0[i]);
     }
 
-   // printf("Norme L1: %f\n", sum);
+   printf("Norme L1: %f\n", sum);
     return sum;
 }
 
@@ -533,18 +539,26 @@ double norme_a1_old(double *vecteur1, double *vecteur0, int Nbsommet) {
 }
 
 
-double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,int Nbsommet_globale, int Nbsommet, int Nbvaleurs) {
+double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,int Nbarcs,int Nbsommet_globale, int Nbsommet, int Nbvaleurs) {
     double *vecteur1=malloc(Nbsommet_globale*sizeof(double));
-    memset(vecteur1, 0, Nbsommet_globale * sizeof(double));
+    memcpy(vecteur1,vecteur0,Nbsommet_globale*sizeof(double));
+    
+
+    for(int i=0;i<Nbarcs;i++){
+        int t=tableauSommets[i].suc-1;
+        vecteur1[t]=0;
+    }// ici ce quon fait c'est que on le vecteur 1 dois recevoir une copie du vecteur 0 sauf pour les sommet de la cfc actuelle qu'on dois chercher a calculer la distribution stat 
+    // donc on dois mettre un 0  a ces sommets 
 
 
+    
     if(vecteur1==NULL){
         printf("erreur allocation vecteur1\n");
         exit(1);}
 
 
 
-    multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbsommet_globale,Nbvaleurs);
+    multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbarcs,Nbsommet,Nbsommet_globale,Nbvaleurs);
 
 
     // printf("veucteur0: ");
@@ -562,7 +576,7 @@ double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,
         vecteur1 = temp;
         // clock_t start = clock();
         
-        multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbsommet_globale,Nbvaleurs);
+        multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbarcs,Nbsommet,Nbsommet_globale,Nbvaleurs);
 
         // clock_t end = clock();
         // printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
@@ -591,11 +605,16 @@ void afficher_graph_suc_pred(struct tableau_liste_chainne tab){
 
 //le graphe dois etre fortement connexe pour que la recherche de la page rank converge ,,,n'est plus vrai maintenant
 double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tableauD *tabD, int Nbsommet, int Nbvaleurs,int *nbiter) {
+    printf("pipi");
     double *vecteur1=malloc(Nbsommet*sizeof(double));
     memset(vecteur1, 0, Nbsommet * sizeof(double));
     // double *vecteurD_Mult1surN_MultAlpha=malloc(Nbsommet*sizeof(double));
      double UnSurN=1.0/Nbsommet;
     struct contigue * aP=malloc(Nbvaleurs*sizeof(struct contigue));
+    if(aP==NULL){
+        printf("erreur allocation aP\n");
+        exit(1);
+    }
     int stop=0;
      double deuxieme_terme=0;
      clock_t start, end;
@@ -609,10 +628,10 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
     #pragma omp single
     NUM_THREADS=omp_get_num_threads();
 
-    #pragma omp single nowait
-    {
-        *nbiter++;
-    }
+    // #pragma omp single nowait
+    // {
+    //     (*nbiter)++;
+    // }
     // creation des threads 
 
 
@@ -743,6 +762,8 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 
 
         #pragma omp single
+        (*nbiter)++;
+
         if(norme_a1(vecteur1,vecteur0,Nbsommet)<EPSILON){
           //  printf("Convergence atteinte\n");
 
@@ -850,6 +871,10 @@ for (int i=0;i<nbcfc;i++){
         free(temp);
     }
 }
+free(tableau_de_sousmatrice_cfc);
+free(nb_succeseur_par_sommet);
+free(probabilite_cummle_par_arc_supprime);
+
 
 *resultat1=tableau_de_sousmatrice_cfc_contigue;
 *resultat2=nbarcs_par_cfc;
@@ -965,7 +990,7 @@ printf("transformation de la matrice faite\n");
 //===========================================
 
 double *vecteur0=malloc(Nbsommet*sizeof(double));
-
+memset(vecteur0,0,Nbsommet*sizeof(double));
 
 int * cfc_traite=malloc(nbcfc*sizeof(double));
 
@@ -1012,16 +1037,10 @@ printf("elle dois etre egale au nombre de cfc qui est %d\n", nbcfc);
 
 
 for (int i=0;i<nbcfc;i++){
-    if(nbarcs_par_cfc[i]>1){
-        vecteur0=recherchep_sans_surf(tableau_de_sousmatrice_cfc_contigue[i],vecteur0,Nbsommet,nb_sommets_par_cfc[i],nbarcs_par_cfc[i]);
-        
-        sum=0;
-        for(int i=0;i<Nbsommet;i++){
-            sum+=vecteur0[i];
-        }   
-        printf("la somme des elements du vecteur0 est %f\n", sum);
+    if(nb_sommets_par_cfc[i]>1){
 
-        sleep(1);
+        vecteur0=recherchep_sans_surf(tableau_de_sousmatrice_cfc_contigue[i],vecteur0,nbarcs_par_cfc[i],Nbsommet,nb_sommets_par_cfc[i],nbarcs_par_cfc[i]);
+        
     }
 }
 
@@ -1032,29 +1051,20 @@ printf("recherche sans surf done\n");
 // printf("===apres la premiere cherche===\n");
 
 // afficher_vecteur(vecteur0,Nbsommet);
+        sum=0;
+    for(int i=0;i<Nbsommet;i++){
+        sum+=vecteur0[i];
+    }   
+    printf("la somme des elements du vecteur0 est %f\n", sum);
 
 
- sum=0;
-for(int i=2753;i<Nbsommet;i++){
-    sum+=vecteur0[i];
-}  
-
-
-
-
- printf("la somme des elements du vecteur0 est %f\n", sum);
-
-
- sleep(5);
-
- exit(0);
 // printf("le nombre de cfc est %d\n", nbcfc);
  
 
 
 for(int i=0;i<Nbsommet;i++){
 
-    vecteur0[i]=vecteur0[i]/nbcfc;
+    vecteur0[i]=vecteur0[i]/sum;
 }
 // afficher_vecteur(vecteur0,Nbsommet);
 
@@ -1067,8 +1077,19 @@ for(int i=0;i<Nbsommet;i++){
 
 printf("la somme des elements du vecteur0 est %f\n", sum);
 
-
 int nbiter=0;
+
+for(int i=0;i<nbcfc;i++){
+    free(tableau_de_sousmatrice_cfc_contigue[i]);
+}
+free(tableau_de_sousmatrice_cfc_contigue);
+free(nbarcs_par_cfc);
+free(cfc);
+
+
+memset(vecteur0,0,Nbsommet*sizeof(double));
+
+vecteur0[0]=1;
 
 vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
 
