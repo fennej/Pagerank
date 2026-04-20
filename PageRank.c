@@ -403,6 +403,71 @@ void afficher_liste_chainne(struct list_chainne_de_sommet *liste){
     }
 }
 
+
+
+int* coposants_connexe(struct tableau_liste_chainne graph, int nbsommets,int *nbcc ,int **nb_sommets_par_cc){
+
+    int * cc=malloc(nbsommets*sizeof(int));// qui contiendra les numeors des cc par sommet
+    memset(cc,-1,nbsommets*sizeof(int));
+    int c=0;
+    int * nbsommets_par_cc_inner=malloc(nbsommets*sizeof(int));
+    memset(nbsommets_par_cc_inner,0,nbsommets*sizeof(int));
+
+    struct list_chainne_de_sommet* successeur=NULL;
+
+    struct list_chainne_de_sommet* stack_iterations=NULL; //oours les iterations du DFS
+    int sommet_courant=0;
+    int index_visited=0;
+    int numero_cc=-1;// pour pouvoir l'incrementer en suite dans la premiere while et que ca fasse 0
+
+    while((c=tout_visite(cc,nbsommets,&index_visited))!=-1){
+        int sommet_courant=c;
+        stack_iterations=stack(stack_iterations,sommet_courant);
+        numero_cc++;
+        
+        // debut du dfs avec le sommet courant
+        while(stack_iterations!=NULL){
+
+            sommet_courant=peek(stack_iterations);
+
+            if(cc[sommet_courant]==-1){
+
+            
+            cc[sommet_courant]=numero_cc;// on met le numero de la cc dans le tableau des cc
+
+            nbsommets_par_cc_inner[numero_cc]++;// on incremente le nombre de sommet de la cc actuelle
+        }   
+            successeur=graph.tab[sommet_courant];
+            
+
+
+            while(successeur!=NULL&&cc[successeur->sommet-1]!=-1){
+                successeur=successeur->suiv;
+            }
+
+            if(successeur!=NULL){
+                stack_iterations=stack(stack_iterations,successeur->sommet-1);
+            }else{
+                stack_iterations=pop(stack_iterations);
+            }
+
+        }
+        
+
+
+    }
+
+
+    libmemstack(&stack_iterations);
+    *nbcc=numero_cc+1;
+    *nb_sommets_par_cc=realloc(nbsommets_par_cc_inner,(*nbcc)*sizeof(int));
+    return cc;
+}
+
+
+
+
+
 // dificulté a mettre cette algo en it 
 int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne graph_pred, int nbsommets,int *nbcfc ,int **nb_sommets_par_cfc){
     //cration de la liste visité
@@ -881,6 +946,62 @@ free(probabilite_cummle_par_arc_supprime);
 }
 
 
+
+//cette fonction vas nous creer un graphe concentre a partir du graphe initial en ne gardant que les arcs inter cfc, et toutes les probabilites sont a 0 et vont etre mis a jour apres
+void graphe_concentre(struct contigue* tableauSommets,int Nbsommets,int Nbarcs,int * cfc, int * nbsommets_par_cfc,int nbcfc_non_triviales,struct contigue ** graphe_concentre_result, int * nb_arcs_graphe_concentre_result){
+
+    int nb_arcs_graphe_concentre=0;
+    if(((nbcfc_non_triviales*(nbcfc_non_triviales-1))/2)+nbcfc_non_triviales<Nbarcs){
+        nb_arcs_graphe_concentre = ((nb_arcs_graphe_concentre=nbcfc_non_triviales*(nbcfc_non_triviales-1))/2)+nbcfc_non_triviales; // on ajoute nbcfc_non_triviales pour les arcs de self loop qui sont les arcs qui partent d'une cfc vers elle meme et qui sont necessaire pour la convergence du page rank
+    }else{
+        nb_arcs_graphe_concentre=Nbarcs;
+    }
+
+    int * cfc_checked=malloc(nbcfc_non_triviales*sizeof(int));
+    memset(cfc_checked,0,nbcfc_non_triviales*sizeof(int));
+
+
+    struct contigue * graphe_concentre=malloc(nb_arcs_graphe_concentre*sizeof(struct contigue));
+
+    int index=0; // pour remplir le graphe concentre
+    for(int i=0;i<Nbarcs;i++){
+        int sommet=tableauSommets[i].pred;
+        int successeur=tableauSommets[i].suc;
+        if(nbsommets_par_cfc[cfc[sommet-1]]>1){
+            if(cfc[sommet-1]!=cfc[successeur-1]){
+                cfc_checked[cfc[sommet-1]]=1;
+                graphe_concentre[index].pred=cfc[sommet-1];
+                graphe_concentre[index].suc=cfc[successeur-1];
+                graphe_concentre[index].probabilite=0;
+                index++;
+            }
+        }
+    }
+
+
+//les cycles sont uniquement pour les cfc non triviale avec 
+
+    int offset=0; // le offset c'est pour juste avancer dans le graphe pour mettre les boucles...
+    for(int i=0;i<nbcfc_non_triviales;i++){
+        if(cfc_checked[i]==1){
+            graphe_concentre[index+offset].pred=i;
+            graphe_concentre[index+offset].suc=i;
+            graphe_concentre[index+offset].probabilite=0;
+            offset++;
+        }
+    }
+
+    free(cfc_checked);
+    
+    graphe_concentre=realloc(graphe_concentre,(index+offset)*sizeof(struct contigue));
+
+     *graphe_concentre_result=graphe_concentre;
+     *nb_arcs_graphe_concentre_result=index+offset;
+}
+
+
+
+
 int main(){
 
 int Nbsommet = 0;
@@ -973,6 +1094,9 @@ int *nbarcs_par_cfc;
 transformation_matrice(tableauSommets,Nbsommet,nb_sommets_par_cfc,cfc,nbcfc,Nbval,&tableau_de_sousmatrice_cfc_contigue,&nbarcs_par_cfc);
 
 
+
+struct contigue * graphe_conc;
+int nb_arcs_graphe_conc;
 // printf("le nombre de sommet de la cfc 0 est %d\n", nb_sommets_par_cfc[2753]);
 // printf("le nombre de arcs de la cfc 0 est %d\n", nbarcs_par_cfc[2753]);
 
@@ -1014,7 +1138,9 @@ printf("la somme des elements du vecteur0 est %f\n", sum);
 printf("elle dois etre egale au nombre de cfc qui est %d\n", nbcfc);
 
 //===========================================
-
+int nbcfc_non_triviales=sum;
+graphe_concentre(tableauSommets,Nbsommet,Nbval,cfc,nb_sommets_par_cfc,nbcfc_non_triviales,&graphe_conc,&nb_arcs_graphe_conc);
+ 
 
 
 
@@ -1062,10 +1188,17 @@ printf("recherche sans surf done\n");
  
 
 
-for(int i=0;i<Nbsommet;i++){
+for(int i=0; i<Nbsommet; i++){
+     int numero_cfc = cfc[i];
+    if(nb_sommets_par_cfc[numero_cfc]==1){
+        vecteur0[i]= 1.0 / (double)Nbsommet;
+    }else{
 
-    vecteur0[i]=vecteur0[i]/sum;
+   
+    vecteur0[i] = vecteur0[i] * ((double)nb_sommets_par_cfc[numero_cfc] / (double)Nbsommet);
+    }
 }
+
 // afficher_vecteur(vecteur0,Nbsommet);
 
 sum=0;
@@ -1073,9 +1206,10 @@ for(int i=0;i<Nbsommet;i++){
     sum+=vecteur0[i];
 }   
 
-
-
 printf("la somme des elements du vecteur0 est %f\n", sum);
+
+
+
 
 int nbiter=0;
 
@@ -1089,7 +1223,9 @@ free(cfc);
 
 memset(vecteur0,0,Nbsommet*sizeof(double));
 
-vecteur0[0]=1;
+for(int i=0;i<Nbsommet;i++){
+vecteur0[i]=1.0/Nbsommet;
+}
 
 vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
 
