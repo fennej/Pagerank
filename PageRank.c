@@ -607,7 +607,7 @@ double norme_a1_old(double *vecteur1, double *vecteur0, int Nbsommet) {
 double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,int Nbarcs,int Nbsommet_globale, int Nbsommet, int Nbvaleurs) {
     double *vecteur1=malloc(Nbsommet_globale*sizeof(double));
     memcpy(vecteur1,vecteur0,Nbsommet_globale*sizeof(double));
-    
+    int cpt=0; //pour arreter ce page rank
 
     for(int i=0;i<Nbarcs;i++){
         int t=tableauSommets[i].suc-1;
@@ -625,14 +625,15 @@ double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,
 
     multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbarcs,Nbsommet,Nbsommet_globale,Nbvaleurs);
 
-
+        printf("ici1\n");
     // printf("veucteur0: ");
     // afficher_vecteur(vecteur0,Nbsommet);
     // printf("veucteur1: ");
     // afficher_vecteur(vecteur1,Nbsommet);
 
-    while (norme_a1_old(vecteur1,vecteur0,Nbsommet)>EPSILON)
+    while (norme_a1_old(vecteur1,vecteur0,Nbsommet_globale)>EPSILON&&cpt<8)
     {
+        cpt++;
 
        // printf("%lf\n",norme_a1_old(vecteur1,vecteur0,Nbsommet));
 
@@ -642,10 +643,6 @@ double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,
         // clock_t start = clock();
         
         multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbarcs,Nbsommet,Nbsommet_globale,Nbvaleurs);
-
-        // clock_t end = clock();
-        // printf("Temps d'execution de la multiplication matrice-vecteur: %f secondes\n", ((double)(end - start)) / CLOCKS_PER_SEC);
-
 
     }
     free(vecteur0);
@@ -673,13 +670,6 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 
 
     
-    double temp=0;
-    for(int i=0;i<Nbsommet;i++){
-        temp+=vecteur0[i];
-    }
-    
-    printf("somme du vecteur0 apres la premiere iteration: %f\n", temp);
-    sleep(5);
 
     double *vecteur1=malloc(Nbsommet*sizeof(double));
     memset(vecteur1, 0, Nbsommet * sizeof(double));
@@ -781,15 +771,7 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 
         // }
 
-    #pragma omp single
-    {
-        double temp=0.0;
-        for(int i=0;i<Nbsommet;i++){
-            temp+=vecteur1[i];
-        }
-        printf("somme du vecteur1 apres la premiere iteration: %f\n", temp);
-        sleep(1);
-    }
+
 
         #pragma omp single
         {
@@ -1170,10 +1152,11 @@ int index_non_triviale=1;
 
 for(int i=0;i<Nbsommet;i++){
     int numero_cfc=cfc[i];
-    if(cfc_traite[numero_cfc]==0){
+    if(nb_sommets_par_cfc[numero_cfc]>1)
+        vecteur0[i]=1.0/nb_sommets_par_cfc[numero_cfc];// pour les cfc non triviale on initialise le vecteur de base a la distribution uniforme pour que la recherche du page rank local converge plus vite
+        if(cfc_traite[numero_cfc]==0){
         cfc_traite[numero_cfc]=1;
         if(nb_sommets_par_cfc[numero_cfc]>1){
-            vecteur0[i]=1;
             mapping_cfc_non_triviales_to_1[numero_cfc]=index_non_triviale;
             mapping_1_to_cfc_non_triviales[index_non_triviale]=numero_cfc;
             index_non_triviale++;
@@ -1204,16 +1187,22 @@ int nbcfc_non_triviales=sum;
 
 
 
+int cc=0;
 
 
+// for (int i=0;i<nbcfc;i++){
+//     if(nb_sommets_par_cfc[i]>1){
+//         vecteur0=recherchep_sans_surf(tableau_de_sousmatrice_cfc_contigue[i],
+//             vecteur0,
+//             nbarcs_par_cfc[i],
+//             Nbsommet,
+//             nb_sommets_par_cfc[i],
+//             nbarcs_par_cfc[i]);
 
-for (int i=0;i<nbcfc;i++){
-    if(nb_sommets_par_cfc[i]>1){
-
-        vecteur0=recherchep_sans_surf(tableau_de_sousmatrice_cfc_contigue[i],vecteur0,nbarcs_par_cfc[i],Nbsommet,nb_sommets_par_cfc[i],nbarcs_par_cfc[i]);
         
-    }
-}
+//     }
+
+// }
 
 printf("recherche sans surf done\n");
 
@@ -1248,44 +1237,7 @@ graphe_concentre(tableauSommets,
 );
 
 printf("graphe concentre done\n");
-// ecrituretabD(tabD_graphe_concentre, "tabD_graphe_concentre.txt");
-// ecritutrfichier(graphe_conc, nb_arcs_graphe_conc, "graphe_concentre.txt");
-// exit(0);
 
-// printf("===== DEBUG tabD_graphe_concentre =====\n");
-// printf("Nombre de CFCs dangling: %d\n", tabD_graphe_concentre.Nbsommet);
-// for(int i=0; i<tabD_graphe_concentre.Nbsommet; i++){
-//     printf("  Dangling CFC index: %d\n", tabD_graphe_concentre.tabD[i]);
-// }
-// printf("nbcfc_non_triviales: %d\n", nbcfc_non_triviales);
-// printf("=====================================\n");
-
-
-// printf("===== DEBUG Arcs du graphe concentre =====\n");
-// printf("Nombre total d'arcs: %d\n", nb_arcs_graphe_conc);
-
-// // Pour chaque CFC non-triviale, calculer la somme des probas sortantes
-// double *somme_proba_sortante = malloc(nbcfc_non_triviales * sizeof(double));
-// memset(somme_proba_sortante, 0, nbcfc_non_triviales * sizeof(double));
-
-// for(int i=0; i<nb_arcs_graphe_conc; i++){
-//     int pred_cfc = graphe_conc[i].pred;
-//     double proba = graphe_conc[i].probabilite;
-//     somme_proba_sortante[pred_cfc-1] += proba;
-// }
-
-// printf("Somme des probas sortantes par CFC:\n");
-// for(int i=0; i<nbcfc_non_triviales; i++){
-//     if(somme_proba_sortante[i]!=0.0&& somme_proba_sortante[i]!=1.0){
-//         printf("  CFC %d: Somme des probas sortantes = %f\n", i+1, somme_proba_sortante[i]);
-//         break;
-//     }
-// }
-// printf("=====================================\n");
-// free(somme_proba_sortante);
-
-
-//double* vecteur_stationnaire_graphe_concentre=recherchep(graphe_conc,vecteur0,tabD,nbcfc_non_triviales,nb_arcs_graphe_conc,&nbiter);
 
 printf("recherche du page rank du graphe concentre done\n");
 
@@ -1308,41 +1260,64 @@ vecteur_graph_reduit=recherchep(graphe_conc,
 
     printf("recherche du page rank du graphe concentre avec le vecteur de base done\n");
 
-    double tata=0;
-    for(int i=0;i<nbcfc_non_triviales;i++){
-        tata+=vecteur_graph_reduit[i];
-        printf("%lf\n",vecteur_graph_reduit[i]);
-    }
-    printf("la somme des elements du vecteur graph reduit est %f\n", tata);
- 
-exit(0);
 
 
 
 for(int i=0;i<nbcfc;i++){
     free(tableau_de_sousmatrice_cfc_contigue[i]);
 }
+
 free(tableau_de_sousmatrice_cfc_contigue);
 free(nbarcs_par_cfc);
+
+
+// Combiner : distribution locale × poids global de la CFC
+for(int i = 0; i < Nbsommet; i++){
+    int cfc_sommet = cfc[i];
+    int mapped = mapping_cfc_non_triviales_to_1[cfc_sommet];
+    if(mapped > 0){
+        // mapped est 1-based, vecteur_graph_reduit est 0-based
+        vecteur0[i] *= vecteur_graph_reduit[mapped - 1];
+    } else {
+        // CFC triviale : PageRank local nul pour l'instant
+        vecteur0[i] = 0.0;
+    }
+}
+
+// Vérification : la somme doit être ~1
+double check = 0;
+for(int i = 0; i < Nbsommet; i++) check += vecteur0[i];
+printf("Somme vecteur0 avant recherchep final (doit ≈ 1): %f\n", check);
+sleep(5);
 free(cfc);
 
+// double somme=0;
+// for(int i=0;i<Nbsommet;i++){   
+//     somme+=vecteur0[i];
+// }
 
-memset(vecteur0,0,Nbsommet*sizeof(double));
 
-vecteur0[0]=1;
 
+// printf("la somme des elements du vecteur0 est %f\n", somme);
+// exit(0);
+
+
+
+
+
+nbiter=0;
 vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
 
-double somme=0;
+ double somme=0;
 for(int i=0;i<Nbsommet;i++){
     somme+=vecteur0[i];
 }
 
 printf("FIN la somme des elements du vecteur0 est %f\n", somme);
-exit(0);
 
 printf("le nombre d'iteration est %d\n", nbiter);  
-printf("le nombre de cfc est %d\n", nbcfc);
+
+
 //a faire je dois creer un autre tableau de trie par l'apartencance des sommets a leur cfc en utilisent le nombre de cfc par sommet, 
 // je creer un nouveau tableau contigue 
 //je parcoure une seul fois l'ancien tableau contigue et je remplis le nouveau en utilisant le numero de la cfc de chaque sommet 
