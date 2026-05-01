@@ -179,13 +179,17 @@ double dynamic_threshold(struct contigue *tableauSommets, int Nbvaleurs) {
     
     // Seuil dynamique
     double threshold = mean - 2 * sigma;
-    
+    if( threshold < 0) {// souvant negatif si les valeurs sont dispersees  de la moyenne 
+        threshold = mean*0.1; //Si une transition est 10 fois plus faible que la moyenne, je considère que c’est une erreur ou un lien insignifiant
+    }
+
     return threshold;
 }
 
 
 void suppression_epsilon_transitions( struct contigue** tableauSommets,int Nbsommets,int* Nbvaleurs,struct tableauD* tabD, struct tableau_liste_chainne* graph_suc, struct tableau_liste_chainne* graph_pred,int use_dynamic_threshold){
     double threshold;
+
     if(use_dynamic_threshold){
          threshold=dynamic_threshold(*tableauSommets,*Nbvaleurs);
     }else{
@@ -193,6 +197,7 @@ void suppression_epsilon_transitions( struct contigue** tableauSommets,int Nbsom
     }
     printf("Seuil de suppression des epsilon transitions: %lf\n", threshold);
 
+    sleep(5); 
     struct contigue* new_tableauSommets=malloc((*Nbvaleurs)*sizeof(struct contigue));
     int newnbvaleurs=0;    
     struct tableauD new_tabD;
@@ -213,7 +218,6 @@ void suppression_epsilon_transitions( struct contigue** tableauSommets,int Nbsom
             nb_sucasseur_par_sommet[(*tableauSommets)[i].pred-1]++;
             newnbvaleurs++;
         }else{
-            printf("suppresed");
             // suppression de l'arc dans les graphes de successeurs et de prédécesseurs
             int pred=(*tableauSommets)[i].pred;
             int suc=(*tableauSommets)[i].suc;
@@ -277,6 +281,7 @@ void suppression_epsilon_transitions( struct contigue** tableauSommets,int Nbsom
     *Nbvaleurs=newnbvaleurs;
     *tabD= new_tabD;
 
+    printf("fin de supp");
 }
 
 void afficherliste(Successeur s){
@@ -1451,7 +1456,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("Harvard500.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
+struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 
