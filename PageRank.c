@@ -17,7 +17,8 @@ typedef struct successeur{
  double SMALL_EPSILON = 0.00000001;
  double ALPHA=0.9;
 double sum=0;
-int NUM_THREADS=30;
+
+int NUM_THREADS=10;
 double TRESHOLD= 0.00001;
 
 struct tableauD{
@@ -72,7 +73,7 @@ void sup_aretes(double proba_minimale,struct contigue* tab,int Nbvaleurs){
 
 
 
-struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,struct tableauD** tabD,struct tableau_liste_chainne* graphe_suc,struct tableau_liste_chainne* graphe_pred){
+struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,struct tableauD** tabD,struct tableau_liste_chainne* graphe_suc,struct tableau_liste_chainne* graphe_pred,int create_graphe_suc_pred){
     FILE* file = fopen(filename, "r");
     if (file == NULL) {
         printf("Erreur ouverture fichier\n");
@@ -106,17 +107,21 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
 
      
     struct contigue *tabcontigue=malloc(*Nbval*sizeof(struct contigue));
+    if(create_graphe_suc_pred){
     (*graphe_suc).tab=malloc(*Nbcol*sizeof(struct list_chainne_de_sommet*));
     (*graphe_pred).tab=malloc(*Nbcol*sizeof(struct list_chainne_de_sommet*));
+    
+
 
      for(int i=0;i<*Nbcol;i++){
         graphe_pred->tab[i]=NULL;
         graphe_suc->tab[i]=NULL;
      }
+    
      graphe_pred->Nbsommet=*Nbcol;
 
      graphe_suc->Nbsommet=*Nbcol;
-
+}
 
         for(int i=0;i<*Nbval;i++){
         int pred=0,suc=0;
@@ -126,9 +131,10 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
         char line[256];
         fgets(line, sizeof(line), file);
         sscanf(line, "%d %d", &pred, &suc);  // Prend que les 2 premiers valeurs 
-            
-        graphe_suc->tab[pred-1]=stack(graphe_suc->tab[pred-1],suc); //ici stack joue le role de inser tete 
-        graphe_pred->tab[suc-1]=stack(graphe_pred->tab[suc-1],pred);
+        if(create_graphe_suc_pred){
+            graphe_suc->tab[pred-1]=stack(graphe_suc->tab[pred-1],suc); //ici stack joue le role de inser tete 
+            graphe_pred->tab[suc-1]=stack(graphe_pred->tab[suc-1],pred);
+        }
 
         tabcontigue[i].pred=pred;
         tabcontigue[i].suc=suc;
@@ -151,7 +157,7 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
     for(int i=0;i<*Nbval;i++){
         tabcontigue[i].probabilite=nbsuc[tabcontigue[i].pred-1];
     }
-
+    fclose(file);
     return tabcontigue;
 }
 
@@ -187,6 +193,40 @@ double dynamic_threshold(struct contigue *tableauSommets, int Nbvaleurs) {
 }
 
 
+
+/**
+ * @brief Supprime les transitions faibles (epsilon transitions) selon un seuil dynamique ou statique.
+ * 
+ * Filtre les arcs en ne conservant que ceux avec probabilité >= seuil. Reconstruit :
+ * - Le tableau contiguë des arcs
+ * - Les graphes de successeurs/prédécesseurs
+ * - Le tableau des nœuds dangling (tabD)
+ * 
+ * @param tableauSommets Pointeur vers tableau d'arcs (sera remplacé, l'ancien EST LIBÉRÉ)
+ * @param Nbsommets Nombre de sommets
+ * @param Nbvaleurs Pointeur vers nombre d'arcs (mis à jour avec la nouvelle taille)
+ * @param tabD Tableau des nœuds dangling (mis à jour, l'ancien EST LIBÉRÉ)
+ * @param graph_suc Graphe des successeurs (sera remplacé, L'ANCIEN DOIT ÊTRE LIBÉRÉ PAR L'APPELANT)
+ * @param graph_pred Graphe des prédécesseurs (sera remplacé, L'ANCIEN DOIT ÊTRE LIBÉRÉ PAR L'APPELANT)
+ * @param use_dynamic_threshold 1 = seuil dynamique (mean - 2*sigma), 0 = TRESHOLD constant
+ * 
+ * @warning ⚠️ RESPONSABILITÉ DE L'APPELANT : Libérer graph_suc->tab et graph_pred->tab AVANT d'appeler cette fonction
+ *          Sinon : fuite mémoire des anciennes listes chaînées
+ * 
+ * @note Cette fonction libère automatiquement tabD->tabD et tableauSommets
+ * 
+ * @example
+ * // Libérer avant appel :
+ * for(int i = 0; i < graph_suc.Nbsommet; i++) {
+ *     libmemstack(&graph_suc.tab[i]);
+ *     libmemstack(&graph_pred.tab[i]);
+ * }
+ * free(graph_suc.tab);
+ * free(graph_pred.tab);
+ * 
+ * // Puis appeler :
+ * suppression_epsilon_transitions(&tableauSommets, Nbsommets, &Nbvaleurs, &tabD, &graph_suc, &graph_pred, 1);
+ */
 void suppression_epsilon_transitions( struct contigue** tableauSommets,int Nbsommets,int* Nbvaleurs,struct tableauD* tabD, struct tableau_liste_chainne* graph_suc, struct tableau_liste_chainne* graph_pred,int use_dynamic_threshold){
     double threshold;
 
@@ -205,6 +245,20 @@ void suppression_epsilon_transitions( struct contigue** tableauSommets,int Nbsom
     memset(new_tabD.tabD, 0, Nbsommets*sizeof(int));
     new_tabD.Nbsommet=0;
 
+    struct tableau_liste_chainne new_graph_suc={
+        .tab=malloc(Nbsommets*sizeof(struct list_chainne_de_sommet*)),
+        .Nbsommet=Nbsommets
+    };
+    struct tableau_liste_chainne new_graph_pred={
+        .tab=malloc(Nbsommets*sizeof(struct list_chainne_de_sommet*)),
+        .Nbsommet=Nbsommets
+    };
+    for(int i=0;i<Nbsommets;i++){
+        new_graph_suc.tab[i]=NULL;
+        new_graph_pred.tab[i]=NULL;
+    }
+
+
 
     int * nb_sucasseur_par_sommet=malloc(Nbsommets*sizeof(int));
     memset(nb_sucasseur_par_sommet, 0, Nbsommets*sizeof(int));
@@ -212,56 +266,19 @@ void suppression_epsilon_transitions( struct contigue** tableauSommets,int Nbsom
 
     for(int i=0;i<*Nbvaleurs;i++){
         if((*tableauSommets)[i].probabilite>=threshold){
-            new_tableauSommets[newnbvaleurs].pred=(*tableauSommets)[i].pred;
-            new_tableauSommets[newnbvaleurs].suc=(*tableauSommets)[i].suc;
-            new_tableauSommets[newnbvaleurs].probabilite=(*tableauSommets)[i].probabilite;
-            nb_sucasseur_par_sommet[(*tableauSommets)[i].pred-1]++;
-            newnbvaleurs++;
-        }else{
-            // suppression de l'arc dans les graphes de successeurs et de prédécesseurs
             int pred=(*tableauSommets)[i].pred;
-            int suc=(*tableauSommets)[i].suc;
+             int suc=(*tableauSommets)[i].suc;
+             double probabilite=(*tableauSommets)[i].probabilite;
 
-            // suppression dans graph_suc
-            struct list_chainne_de_sommet* current=graph_suc->tab[pred-1];
-            struct list_chainne_de_sommet* prev=NULL;
-            while(current!=NULL){
-                if(current->sommet==suc){
-                    if(prev==NULL){
-                        graph_suc->tab[pred-1]=current->suiv;
-                    }else{
-                        prev->suiv=current->suiv;
-                    }
-                    free(current);
-                    break;
-                }else{
-                    prev=current;
-                    current=current->suiv;
-                }
-            }
-            if(current==NULL){
-                printf("Erreur: arc (%d -> %d) non trouvé dans graph_suc\n", pred, suc);
-            }
 
-            // suppression dans graph_pred
-            current=graph_pred->tab[suc-1];
-            prev=NULL;
-            while(current!=NULL){
-                if(current->sommet==pred){
-                    if(prev==NULL){
-                        graph_pred->tab[suc-1]=current->suiv;
-                    }else{
-                        prev->suiv=current->suiv;
-                    }
-                    free(current);
-                    break;
-                }
-                prev=current;
-                current=current->suiv;
-            }
-            if(current==NULL){
-                printf("Erreur: arc (%d -> %d) non trouvé dans graph_pred\n", pred, suc);
-            }
+            new_tableauSommets[newnbvaleurs].pred=pred;
+            new_tableauSommets[newnbvaleurs].suc=suc;
+            new_tableauSommets[newnbvaleurs].probabilite=probabilite;
+            nb_sucasseur_par_sommet[(*tableauSommets)[i].pred-1]++;
+
+            new_graph_pred.tab[suc-1]=stack(new_graph_pred.tab[suc-1],pred);
+            new_graph_suc.tab[pred-1]=stack(new_graph_suc.tab[pred-1],suc);
+            newnbvaleurs++;
         }
     }
 
@@ -274,12 +291,19 @@ void suppression_epsilon_transitions( struct contigue** tableauSommets,int Nbsom
 
     new_tableauSommets = realloc(new_tableauSommets, newnbvaleurs * sizeof(struct contigue));
     new_tabD.tabD= realloc(new_tabD.tabD, new_tabD.Nbsommet * sizeof(int));
+    if(new_tableauSommets == NULL || new_tabD.tabD == NULL) {
+        fprintf(stderr, "Erreur de réallocation mémoire\n");
+        exit(EXIT_FAILURE);
+    }
 
     free(tabD->tabD);
     free(*tableauSommets);
     *tableauSommets=new_tableauSommets;
     *Nbvaleurs=newnbvaleurs;
     *tabD= new_tabD;
+    *graph_suc=new_graph_suc;
+    *graph_pred=new_graph_pred;
+    
 
     printf("fin de supp");
 }
@@ -336,19 +360,24 @@ void afficher_vecteur(double *vecteur, int Nbsommet) {
  */
  void multvectmmat_old_sans_surf(struct contigue* tableauSommets,double* vecteur1, double *vecteur0,int Nbarcs, int Nbsommet, int Nbsommet_globale, int Nbvaleurs) {
     // float *vecteur1=malloc(Nbsommet*sizeof(float));
+   #pragma omp single
     memcpy(vecteur1,vecteur0,Nbsommet_globale*sizeof(double));
     
-
+    #pragma omp for
     for(int i=0;i<Nbarcs;i++){
         int t=tableauSommets[i].suc-1;
+        #pragma omp critical
         vecteur1[t]=0;
     }// ici ce quon fait c'est que on le vecteur 1 dois recevoir une copie du vecteur 0 sauf pour les sommet de la cfc actuelle qu'on dois chercher a calculer la distribution stat 
     
+    #pragma omp for
     for(int i=0;i<Nbvaleurs;i++){
         double sum=0.0;
         int pred=tableauSommets[i].pred;
         int suc=tableauSommets[i].suc;
         double prob=tableauSommets[i].probabilite;
+        
+        #pragma omp atomic
         vecteur1[suc-1]+=vecteur0[pred-1]*prob;//pas oublier les -1 car les sommets commencent à 1 dans le fichier
         
 }
@@ -917,15 +946,24 @@ double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,
     double *vecteur1=malloc(Nbsommet_globale*sizeof(double));
     memcpy(vecteur1,vecteur0,Nbsommet_globale*sizeof(double));
     int cpt=0; //pour arreter ce page rank
+    int stop=0;
 
+omp_set_num_threads(NUM_THREADS);
+#pragma omp parallel
+{
+
+
+    #pragma omp for
     for(int i=0;i<Nbarcs;i++){
         int t=tableauSommets[i].suc-1;
+       
+        #pragma omp critical
         vecteur1[t]=0;
     }// ici ce quon fait c'est que on le vecteur 1 dois recevoir une copie du vecteur 0 sauf pour les sommet de la cfc actuelle qu'on dois chercher a calculer la distribution stat 
     // donc on dois mettre un 0  a ces sommets 
 
 
-    
+    #pragma omp single
     if(vecteur1==NULL){
         printf("erreur allocation vecteur1\n");
         exit(1);}
@@ -934,13 +972,11 @@ double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,
 
     multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbarcs,Nbsommet,Nbsommet_globale,Nbvaleurs);
 
-    // printf("veucteur0: ");
-    // afficher_vecteur(vecteur0,Nbsommet);
-    // printf("veucteur1: ");
-    // afficher_vecteur(vecteur1,Nbsommet);
-
-    while (norme_a1_old(vecteur1,vecteur0,Nbsommet_globale)>EPSILON&&cpt<2)
+    
+    while (!stop)
     {
+        #pragma omp single
+        {
         cpt++;
 
        // printf("%lf\n",norme_a1_old(vecteur1,vecteur0,Nbsommet));
@@ -948,10 +984,18 @@ double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,
         double *temp = vecteur0;
         vecteur0 = vecteur1;
         vecteur1 = temp;
+        }
         // clock_t start = clock();
         
         multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbarcs,Nbsommet,Nbsommet_globale,Nbvaleurs);
 
+        #pragma omp single
+        {
+        if( norme_a1_old(vecteur1,vecteur0,Nbsommet_globale)<EPSILON||cpt>2){
+            stop=1;
+        }
+        }
+    }
     }
     free(vecteur0);
     return vecteur1;
@@ -1043,21 +1087,8 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
         vecteur1[i]=vecteur1[i]+deuxieme_terme;
     }  
 
-
-
-
-// #pragma omp single
-//     {
-//         printf("Deuxieme terme: %f\n", deuxieme_terme);
-//         printf("Vecteur apres multiplication matrice-vecteur:\n");
-//         afficher_vecteur(vecteur1,Nbsommet);
-//     }
-
-// enlever cette while mettre un test qui sera a faux une fois convergé , donc le test de conv sera un test a l'interrieur 
-
     while (!stop)
     {
-
         //single
         #pragma omp single
         {
@@ -1067,41 +1098,18 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
             //  start = clock();
         }
 
-
-
         multvectmmat(aP,vecteur1,vecteur0,Nbsommet,Nbvaleurs);
 
         #pragma omp single
         {
         deuxieme_terme=0;
         }
-
-
-
         calculer_cst(&deuxieme_terme,vecteur0,tabD,UnSurN,Nbsommet);
 
-
-
-        
         #pragma omp for 
         for (int i=0;i<Nbsommet;i++){
             vecteur1[i]=vecteur1[i]+deuxieme_terme;
         }
-
-        // #pragma omp single
-        // {
-        // double temp=0.0;
-        // for(int i=0;i<Nbsommet;i++){
-        //     temp+=vecteur1[i];
-        // }   
-        // printf("somme du vecteur1 a l'iteration %d: %f\n", cpt, temp);
-        //     cpt++;
-        //     sleep(1);
-
-        // }
-
-
-
         #pragma omp single
         {
             (*nbiter)++;
@@ -1119,8 +1127,6 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
         }
 
     }
-
-    
     }
 
     free(aP);       // Libérer aP
@@ -1456,11 +1462,11 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
+struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred,1);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 
-suppression_epsilon_transitions(&tableauSommets,Nbsommet,&Nbval,tabD,&graph_suc,&graph_pred,1);
+//suppression_epsilon_transitions(&tableauSommets,Nbsommet,&Nbval,tabD,&graph_suc,&graph_pred,1);
 
 
 int nbcfc;// nombre de composantes fortement connexes
@@ -1565,6 +1571,7 @@ printf("recherche sans surf done\n");
     }   
     printf("la somme des elements du vecteur0 est %f\n", sum);
 
+
 int nbiter=0;
 struct tableauD tabD_graphe_concentre;
 
@@ -1584,10 +1591,13 @@ graphe_concentre(tableauSommets,
 printf("graphe concentre done\n");
 
 
-
+double ttt=0;
 double* vecteur_graph_reduit= malloc(nbcfc*sizeof(double));
 memset(vecteur_graph_reduit, 0, nbcfc*sizeof(double));
-
+for(int i=0;i<nbcfc;i++){
+    vecteur_graph_reduit[i]=1.0/nbcfc;// pour les cfc non triviale on initialise le vecteur de base a la distribution uniforme pour que la recherche du page rank local converge plus vite
+    ttt+=vecteur_graph_reduit[i];
+}
 
 vecteur_graph_reduit=recherchep(graphe_conc,
     vecteur_graph_reduit,
@@ -1599,7 +1609,6 @@ vecteur_graph_reduit=recherchep(graphe_conc,
     );
 
 
-//    vecteur_graph_reduit=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter);
 
 
 double titi=0;
@@ -1617,38 +1626,6 @@ for(int i=0;i<nbcfc;i++){
 free(tableau_de_sousmatrice_cfc_contigue);
 free(nbarcs_par_cfc);
 
-
-// Combiner : distribution locale × poids global de la CFC
-// for(int i = 0; i < Nbsommet; i++){
-//     int cfc_sommet = cfc[i];
-//     int mapped = mapping_cfc_non_triviales_to_1[cfc_sommet];
-//     if(mapped > 0){
-//         // mapped est 1-based, vecteur_graph_reduit est 0-based
-//         vecteur0[i] *= vecteur_graph_reduit[mapped - 1];
-//     } else {
-//         // CFC triviale : PageRank local nul pour l'instant
-//         vecteur0[i] = 0.0;
-//     }
-// }
-
-// // Vérification : la somme doit être ~1
-// double check = 0;
-// for(int i = 0; i < Nbsommet; i++) check += vecteur0[i];
-// printf("Somme vecteur0 avant recherchep final (doit ≈ 1): %f\n", check);
-// sleep(5);
-
-// free(cfc);
-
-// double somme=0;
-// for(int i=0;i<Nbsommet;i++){   
-//     somme+=vecteur0[i];
-// }
-
-
-
-// printf("la somme des elements du vecteur0 est %f\n", somme);
-
-// exit(0);
 
 printf("combinaison done\n");
 
