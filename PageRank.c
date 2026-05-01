@@ -17,7 +17,7 @@ typedef struct successeur{
  double SMALL_EPSILON = 0.00000001;
  double ALPHA=0.9;
 double sum=0;
- int NUM_THREADS=1;
+ int NUM_THREADS=30;
 
 struct tableauD{
     int *tabD;
@@ -121,6 +121,87 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
         int pred=0,suc=0;
         
         fscanf(file, "%d %d", &pred, &suc);
+        
+      
+        graphe_suc->tab[pred-1]=stack(graphe_suc->tab[pred-1],suc); //ici stack joue le role de inser tete 
+        graphe_pred->tab[suc-1]=stack(graphe_pred->tab[suc-1],pred);
+
+        tabcontigue[i].pred=pred;
+        tabcontigue[i].suc=suc;
+        nbsuc[pred-1]++;
+        
+    }
+   // affichertab(tableauSommets,*NbLignes);
+
+// si on met une distribution uniforme sur le sommet si il a des sucesseurs ou bien on met c'est un dargling node et au quelle cas le tabD est a 1 au sommet 
+   for(int i=0;i<*NbLignes;i++){
+    if(nbsuc[i]>0)
+    nbsuc[i]=1.0/nbsuc[i];
+    else{
+        (*tabD)->tabD[(*tabD)->Nbsommet]=i;
+        (*tabD)->Nbsommet++;
+    }
+   }
+
+
+    for(int i=0;i<*Nbval;i++){
+        tabcontigue[i].probabilite=nbsuc[tabcontigue[i].pred-1];
+    }
+
+    return tabcontigue;
+}
+
+
+struct contigue * lecturefichier_matrixm_with_proba(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,struct tableauD** tabD,struct tableau_liste_chainne* graphe_suc,struct tableau_liste_chainne* graphe_pred){
+    FILE* file = fopen(filename, "r");
+    if (file == NULL) {
+        printf("Erreur ouverture fichier\n");
+        return NULL;
+    }
+
+
+
+    double prob;
+    char buffer[100];
+    while(fgets(buffer,sizeof(buffer),file)!=NULL){
+        if(buffer[0]=='%'){
+            continue;
+        }else{
+    char temp;
+        sscanf(buffer,"%d %d %d",NbLignes,Nbcol,Nbval);
+        break;
+        }
+    }
+
+     double *nbsuc =malloc(*NbLignes*sizeof(double));
+     for(int i=0;i<*NbLignes;i++){
+        nbsuc[i]=0;
+     }
+
+     (*tabD)->tabD=malloc(*NbLignes*sizeof(int));
+     for(int i=0;i<*NbLignes;i++){
+        (*tabD)->tabD[i]=0;
+     }
+     (*tabD)->Nbsommet=0;
+
+     
+    struct contigue *tabcontigue=malloc(*Nbval*sizeof(struct contigue));
+    (*graphe_suc).tab=malloc(*Nbcol*sizeof(struct list_chainne_de_sommet*));
+    (*graphe_pred).tab=malloc(*Nbcol*sizeof(struct list_chainne_de_sommet*));
+
+     for(int i=0;i<*Nbcol;i++){
+        graphe_pred->tab[i]=NULL;
+        graphe_suc->tab[i]=NULL;
+     }
+     graphe_pred->Nbsommet=*Nbcol;
+
+     graphe_suc->Nbsommet=*Nbcol;
+
+
+        for(int i=0;i<*Nbval;i++){
+        int pred=0,suc=0;
+        
+        fscanf(file, "%d %d %lf", &pred, &suc, &prob);
         graphe_suc->tab[pred-1]=stack(graphe_suc->tab[pred-1],suc); //ici stack joue le role de inser tete 
         graphe_pred->tab[suc-1]=stack(graphe_pred->tab[suc-1],pred);
 
@@ -151,8 +232,6 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
 
 
 
-
-
 void afficherliste(Successeur s){
     while(s!=NULL){
         printf("Sommet: %d, Probabilite: %f\n", s->sommet, s->probabilite);
@@ -178,7 +257,32 @@ void afficher_vecteur(double *vecteur, int Nbsommet) {
 }
 
 
-
+/**
+ * @brief Multiplication matrice-vecteur pour une CFC isolée, avec réinitialisation partielle (version itérative sans parallélisation).
+ * 
+ * Effectue une multiplication matrice-vecteur A·v où seuls les sommets de la CFC actuelle 
+ * sont modifiés. Utile pour calculer le PageRank local à l'intérieur d'une CFC non triviale.
+ * 
+ * Algorithme :
+ * 1. Copie complète de vecteur0 vers vecteur1 (tout le vecteur global)
+ * 2. Réinitialise à 0 les éléments de vecteur1 pour les successeurs de la CFC (Nbarcs sommets)
+ * 3. Accumule les contributions matrice-vecteur pour les arcs : vecteur1[suc-1] += vecteur0[pred-1] * prob
+ * 
+ * Cette approche isole le calcul de PageRank à une CFC donnée en neutralisant les contributions
+ * extérieures (provenant d'autres CFCs).
+ * 
+ * @param tableauSommets Tableau contiguë des arcs de la CFC (format: predecesseur, successeur, probabilité)
+ * @param vecteur1 Vecteur résultat (sortie, de taille Nbsommet_globale, modifié)
+ * @param vecteur0 Vecteur d'entrée (lecture seule, de taille Nbsommet_globale)
+ * @param Nbarcs Nombre d'arcs dans la CFC actuelle (détermine quels éléments sont réinitialisés à 0)
+ * @param Nbsommet Nombre de sommets dans la CFC actuelle
+ * @param Nbsommet_globale Nombre total de sommets dans le graphe global
+ * @param Nbvaleurs Nombre total d'arcs à traiter (itérations de la boucle de calcul)
+ * 
+ * @note Exécution séquentielle (sans OpenMP). Utilisée pour les CFCs non triviales au cours
+ *       de la première phase de calcul de PageRank hiérarchique (recherchep_sans_surf).
+ *       Les éléments du vecteur hors de la CFC restent identiques à vecteur0.
+ */
  void multvectmmat_old_sans_surf(struct contigue* tableauSommets,double* vecteur1, double *vecteur0,int Nbarcs, int Nbsommet, int Nbsommet_globale, int Nbvaleurs) {
     // float *vecteur1=malloc(Nbsommet*sizeof(float));
     memcpy(vecteur1,vecteur0,Nbsommet_globale*sizeof(double));
@@ -189,22 +293,34 @@ void afficher_vecteur(double *vecteur, int Nbsommet) {
         vecteur1[t]=0;
     }// ici ce quon fait c'est que on le vecteur 1 dois recevoir une copie du vecteur 0 sauf pour les sommet de la cfc actuelle qu'on dois chercher a calculer la distribution stat 
     
-    
-
-
     for(int i=0;i<Nbvaleurs;i++){
         double sum=0.0;
         int pred=tableauSommets[i].pred;
         int suc=tableauSommets[i].suc;
         double prob=tableauSommets[i].probabilite;
         vecteur1[suc-1]+=vecteur0[pred-1]*prob;//pas oublier les -1 car les sommets commencent à 1 dans le fichier
-
         
 }
 }
 
 
-
+/**
+ * @brief Effectue la multiplication matrice-vecteur (A·v) en parallèle avec OpenMP.
+ * 
+ * Multiplie le tableau contiguë du graphe (représentant la matrice d'adjacence pondérée)
+ * par le vecteur d'entrée vecteur0, et accumule le résultat dans vecteur1 avec opérations atomiques
+ * pour éviter les conditions de course. Chaque arc (pred → suc) contribue à vecteur1[suc-1].
+ * 
+ * @param tableauSommets Tableau contiguë du graphe (format: predecesseur, successeur, probabilité)
+ * @param vecteur1 Vecteur résultat (sortie, de taille Nbsommet) - sera réinitialisé à zéro
+ * @param vecteur0 Vecteur d'entrée (lecture seule, de taille Nbsommet)
+ * @param Nbsommet Nombre de sommets du graphe
+ * @param Nbvaleurs Nombre d'arcs dans le graphe
+ * 
+ * @note Parallélisée avec #pragma omp for. Les opérations atomiques garantissent la cohérence
+ *       lors d'accès concurrents au même élément de vecteur1. Le zéro initial est effectué 
+ *       en section critique (#pragma omp single).
+ */
  void multvectmmat(struct contigue* tableauSommets,double* vecteur1, double *vecteur0, int Nbsommet, int Nbvaleurs) {
     // double *vecteur1=malloc(Nbsommet*sizeof(double));
     #pragma omp single
@@ -229,7 +345,19 @@ void afficher_vecteur(double *vecteur, int Nbsommet) {
 }
 
 
-
+/**
+ * @brief Calcule la norme L1 (Manhattan) entre deux vecteurs : sum(|v1[i] - v0[i]|).
+ * 
+ * Utilisée comme critère de convergence dans l'algorithme d'itération de puissance du PageRank.
+ * 
+ * @param vecteur1 Premier vecteur (de taille Nbsommet)
+ * @param vecteur0 Deuxième vecteur (de taille Nbsommet)
+ * @param Nbsommet Nombre d'éléments dans chaque vecteur
+ * 
+ * @return La norme L1 (distance Manhattan) entre vecteur1 et vecteur0
+ * 
+ * @note Affiche la norme calculée sur stdout avec printf
+ */
 double norme_a1(double *vecteur1, double *vecteur0, int Nbsommet) {
      double sum=0.0;
     for(int i=0;i<Nbsommet;i++){
@@ -244,7 +372,15 @@ double norme_a1(double *vecteur1, double *vecteur0, int Nbsommet) {
 
 
 
-
+/**
+ * @brief Calcule le produit scalaire de deux vecteurs : sum(vect_ligne[i] * vect_col[i]).
+ * 
+ * @param vect_ligne Premier vecteur (de taille nbrdesommet)
+ * @param vect_col Deuxième vecteur (de taille nbrdesommet)
+ * @param nbrdesommet Nombre d'éléments dans chaque vecteur
+ * 
+ * @return Le produit scalaire des deux vecteurs
+ */
 double mult_vectligne_vectcol(double *vect_ligne,double* vect_col,int nbrdesommet){
     double res=0;
 for (int i=0;i<nbrdesommet;i++){
@@ -252,7 +388,19 @@ for (int i=0;i<nbrdesommet;i++){
 }
 return res;
 }
-
+/**
+ * @brief Multiplie tous les éléments d'un tableau de contigue par un scalaire en parallèle.
+ * 
+ * Crée d'abord une copie du tableau source tab dans res, puis multiplie chaque probabilité 
+ * par le scalaire donné. Utilisé pour calculer α·P (avec α = facteur d'amortissement).
+ * 
+ * @param res Tableau résultat (sortie, alloué au préalable)
+ * @param tab Tableau source (lecture seule)
+ * @param scalair Multiplicateur (généralement ALPHA = 0.9 pour PageRank)
+ * @param Nbvaleurs Nombre d'éléments dans le tableau
+ * 
+ * @note Parallélisée avec #pragma omp for. La copie initiale s'effectue en section critique.
+ */
 void mult_scalair(struct contigue *res,struct contigue *tab,double scalair,int Nbvaleurs){
     //pour trouver le alphaP 
 
@@ -268,7 +416,15 @@ void mult_scalair(struct contigue *res,struct contigue *tab,double scalair,int N
         res[i].probabilite*=scalair;
     }
 }
-
+/**
+ * @brief Multiplie tous les éléments d'un vecteur par un scalaire en série.
+ * 
+ * @param vecteur Vecteur à multiplier (modifié in-place, de taille nbsommet)
+ * @param scalair Multiplicateur
+ * @param nbsommet Nombre d'éléments dans le vecteur
+ * 
+ * @return Le vecteur multiplié (même adresse que vecteur)
+ */
 double * mult_vect_scalair(double *vecteur,double scalair,int nbsommet){
     for(int i=0;i<nbsommet;i++){
         vecteur[i]=vecteur[i]*scalair;
@@ -276,6 +432,21 @@ double * mult_vect_scalair(double *vecteur,double scalair,int nbsommet){
     return vecteur;
 }
 
+/**
+ * @brief Calcule le produit scalaire restreint aux nœuds dangling avec réduction OpenMP.
+ * 
+ * Effectue sum(vect_ligne[tabD->tabD[i]] * UnSurN_mult_alpha) où tabD contient les indices
+ * des nœuds sans successeurs (dangling nodes). Utilisé pour calculer la contribution de 
+ * redistribution uniforme du vecteur PageRank.
+ * 
+ * @param res Pointeur vers le résultat (sortie, simple double)
+ * @param vect_ligne Vecteur source (de taille ≥ max(tabD->tabD[i]))
+ * @param tabD Structure tableau des nœuds dangling (tabD->tabD[] contient les indices, tabD->Nbsommet le count)
+ * @param UnSurN_mult_alpha Coefficient préalablement calculé = (1/N) * ALPHA
+ * 
+ * @note Utilise #pragma omp for reduction(+:sum) pour accumulation parallèle sûre.
+ *       Stocke la somme dans la variable globale `sum` puis la copie dans *res.
+ */
 double mult_vectligne_vectcol_BIS(double* res, double *vect_ligne,struct tableauD *tabD,double UnSurN_mult_alpha){
     #pragma omp single
      sum=0;
@@ -283,16 +454,27 @@ double mult_vectligne_vectcol_BIS(double* res, double *vect_ligne,struct tableau
     for(int i =0;i<tabD->Nbsommet;i++){
         sum+=vect_ligne[tabD->tabD[i]]*UnSurN_mult_alpha;
     }
-   // #pragma omp single il ne faut pas faire le signle car tout les threads doivnet mettre a jour leurs premier terme car on ne sais pas qui vas entrer dans le sigle et calucler la constante 
-    //    #pragma omp single
-    // {
-    //     printf("le vecteur passe en param dans bis est ");
-    //     afficher_vecteur(vect_ligne,6);
-    //     printf("la somme est %f\n", sum);
-    // }
     *res=sum;
 }
 
+/**
+ * @brief Calcule la constante de renormalisation pour l'itération PageRank.
+ * 
+ * La constante est composée de deux termes :
+ * - Terme 1 : contribution des nœuds dangling (redistribution)
+ * - Terme 2 : contribution uniforme (1-ALPHA) / N
+ * 
+ * La valeur totale (constante = Terme1 + Terme2) est ajoutée uniformément à tous les éléments
+ * du prochain vecteur itéré pour garantir la normalisation.
+ * 
+ * @param res Pointeur vers le résultat (sortie)
+ * @param veucteur Vecteur actuel du PageRank (lecture seule)
+ * @param tabD Tableau des nœuds dangling (sommets sans successeurs)
+ * @param unsurN Coefficient préalablement calculé = 1 / nombre de sommets
+ * @param nbelts Nombre total de sommets (pour information/débogage)
+ * 
+ * @note Exécutée en section critique (#pragma omp single) car met à jour *res une seule fois par itération
+ */
 void calculer_cst(double *res,double* veucteur, struct tableauD *tabD,double unsurN,int nbelts){
     /*le resultat sera exris dans vecteur*/
    // double premier_terme=mult_vectligne_vectcol(veucteur,vecteurF_P_ALPHA_unsurn,nbsommet);
@@ -322,7 +504,12 @@ double* addition_deux_vecteurs(double* vecteur1, double* vecteur0, int nbelts){
 
 
 
-
+/**
+ * @brief Affiche le contenu d'un tableau contiguë au format (Pred, Suc, Probabilite).
+ * 
+ * @param tab Tableau contiguë du graphe (format: predecesseur, successeur, probabilité)
+ * @param Nbvaleurs Nombre d'éléments dans le tableau
+ */
 void afficher_contigue(struct contigue* tab,int Nbvaleurs){
     for(int i=0;i<Nbvaleurs;i++){
         printf("Pred: %d, Suc: %d, Probabilite: %f\n", tab[i].pred, tab[i].suc, tab[i].probabilite);
@@ -330,7 +517,16 @@ void afficher_contigue(struct contigue* tab,int Nbvaleurs){
 }
 
 
-//creation de la liste
+/**
+ * @brief Crée un nouveau nœud de liste chaînée contenant un sommet.
+ * 
+ * Alloue dynamiquement un nœud initialisé avec le sommet donné et le pointeur suivant à NULL.
+ * 
+ * @param sommet Identifiant du sommet à stocker dans le nœud
+ * @return Pointeur vers le nœud fraîchement alloué
+ * 
+ * @note L'appelant doit libérer la mémoire après utilisation
+ */
 struct list_chainne_de_sommet* creer_liste(int sommet){
     struct list_chainne_de_sommet* nouvelle_liste=malloc(sizeof(struct list_chainne_de_sommet));
     nouvelle_liste->sommet=sommet;
@@ -339,7 +535,12 @@ struct list_chainne_de_sommet* creer_liste(int sommet){
 }
 
 
-//enlever un sommet
+/**
+ * @brief Retire et désalloue le premier nœud de la pile (LIFO).
+ * 
+ * @param liste Pointeur vers le sommet de la pile
+ * @return Pointeur vers le nouveau sommet de la pile (ou NULL si vide)
+ */
 struct list_chainne_de_sommet* pop(struct list_chainne_de_sommet* liste){
     if(liste==NULL){
         return NULL;
@@ -350,7 +551,12 @@ struct list_chainne_de_sommet* pop(struct list_chainne_de_sommet* liste){
     return liste;
 }
 
-//rend le premier sommet sa valeurs
+/**
+ * @brief Retourne le sommet du premier nœud sans le modifier.
+ * 
+ * @param list Pointeur vers le premier nœud de la liste
+ * @return Identifiant du sommet, ou -1 si la liste est vide
+ */
 int peek(struct list_chainne_de_sommet* list){
     if(list==NULL){
         return -1; // ou une autre valeur pour indiquer que la liste est vide
@@ -358,7 +564,17 @@ int peek(struct list_chainne_de_sommet* list){
     return list->sommet;
 }
 
-//ajouter un nouveau sommet dans la stack 
+/**
+ * @brief Ajoute un nouveau sommet en tête de la pile (insertion LIFO).
+ * 
+ * Crée un nouveau nœud et l'insère en tête de la pile chaînée existante.
+ * 
+ * @param liste Pointeur vers le sommet actuel de la pile
+ * @param sommet Identifiant du sommet à ajouter
+ * @return Pointeur vers le nouveau sommet de la pile
+ * 
+ * @note Modifie la structure de la pile par insertion en tête
+ */
 struct list_chainne_de_sommet* stack(struct list_chainne_de_sommet* liste,int sommet){
     struct list_chainne_de_sommet* temp=creer_liste(sommet);
     temp->suiv=liste;
@@ -367,8 +583,19 @@ struct list_chainne_de_sommet* stack(struct list_chainne_de_sommet* liste,int so
 }
 
 
-//cette fonction rend -1 si tout le les sommets on ete visite , et retourne le prochain sommet a visiter sinon
-//elle rend l'index et non le sommet index =sommet -1
+/**
+ * @brief Trouve le prochain sommet non visité dans un tableau de visite.
+ * 
+ * Parcourt le tableau à partir de l'index *depart pour trouver la première position 
+ * où tab[i] == -1 (non visité). Met à jour *depart pour pointer après le sommet trouvé.
+ * 
+ * @param tab Tableau de visite où -1 indique non visité
+ * @param n Taille du tableau
+ * @param depart Pointeur vers l'index de départ (mis à jour après recherche)
+ * @return Identifiant du premier sommet non visité, ou -1 si tous les sommets ont été visités
+ * 
+ * @note Modifie la valeur pointée par depart (effet de bord)
+ */
 int tout_visite(int *tab,int n,int *depart){
     while(*depart<n && tab[*depart]!=-1){
         (*depart)++;
@@ -383,7 +610,16 @@ int tout_visite(int *tab,int n,int *depart){
 
 
 
-
+/**
+ * @brief Libère toute la mémoire d'une liste chaînée et annule le pointeur.
+ * 
+ * Parcourt la liste et désalloue chaque nœud séquentiellement. 
+ * Utile pour nettoyer les listes après leur utilisation.
+ * 
+ * @param liste Pointeur vers le pointeur du premier nœud (double indirection)
+ * 
+ * @note La liste pointée par liste est vidée complètement
+ */
 void libmemstack(struct list_chainne_de_sommet **liste){
     struct list_chainne_de_sommet *temp;
 
@@ -396,14 +632,17 @@ void libmemstack(struct list_chainne_de_sommet **liste){
 
 }
 
-
+/**
+ * @brief Affiche tous les identifiants de sommets d'une liste chaînée (un par ligne).
+ * 
+ * @param liste Pointeur vers le premier nœud de la liste
+ */
 void afficher_liste_chainne(struct list_chainne_de_sommet *liste){
     while(liste!=NULL){
         printf("%d \n",liste->sommet);
         liste=liste->suiv;
     }
 }
-
 
 
 int* coposants_connexe(struct tableau_liste_chainne graph, int nbsommets,int *nbcc ,int **nb_sommets_par_cc){
@@ -453,11 +692,7 @@ int* coposants_connexe(struct tableau_liste_chainne graph, int nbsommets,int *nb
             }
 
         }
-        
-
-
     }
-
 
     libmemstack(&stack_iterations);
     *nbcc=numero_cc+1;
@@ -469,7 +704,29 @@ int* coposants_connexe(struct tableau_liste_chainne graph, int nbsommets,int *nb
 
 
 
-// dificulté a mettre cette algo en it 
+/**
+ * @brief Détecte les composantes fortement connexes (CFC) d'un graphe orienté via l'algorithme de Kosaraju itératif.
+ * 
+ * Implémente l'algorithme de Kosaraju en deux passes itératives (sans récursion) :
+ * 1. Premier DFS sur le graphe normal pour enregistrer l'ordre de visite des sommets
+ * 2. Deuxième DFS sur le graphe inversé (graph_pred) dans l'ordre inverse de visite
+ * 
+ * Chaque CFC reçoit un numéro unique. Les sommets de la même CFC ont le même numéro.
+ * Cet algorithme est fondamental pour décomposer le graphe avant le calcul du PageRank hiérarchique.
+ * 
+ * @param graph Graphe représenté en listes de chaînage des successeurs (tableau_liste_chainne)
+ * @param graph_pred Graphe inverse (prédécesseurs) pour la deuxième phase de Kosaraju
+ * @param nbsommets Nombre total de sommets du graphe
+ * @param nbcfc Pointeur vers le nombre de CFCs (sortie : rempli avec le nombre total de CFCs trouvées)
+ * @param nb_sommets_par_cfc Pointeur vers un tableau alloué (sortie : nb_sommets_par_cfc[i] = nombre de sommets dans la CFC i)
+ * 
+ * @return Tableau `visited` de taille nbsommets où visited[i] = numéro de CFC du sommet i (0-basé)
+ * 
+ * @note Les tableaux de sortie (nbcfc et nb_sommets_par_cfc) sont alloués dynamiquement avec malloc/realloc.
+ *       L'appelant doit libérer ces pointeurs après utilisation.
+ *       Les CFCs sont numérotées de 0 à (nbcfc-1) dans l'ordre de découverte inverse.
+ *       Implémentation itérative sans récursion pour éviter les débordements de pile sur grands graphes.
+ */
 int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne graph_pred, int nbsommets,int *nbcfc ,int **nb_sommets_par_cfc){
     //cration de la liste visité
     int* visited=malloc(nbsommets*sizeof(int));
@@ -626,7 +883,6 @@ double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,
 
     multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbarcs,Nbsommet,Nbsommet_globale,Nbvaleurs);
 
-        printf("ici1\n");
     // printf("veucteur0: ");
     // afficher_vecteur(vecteur0,Nbsommet);
     // printf("veucteur1: ");
@@ -667,10 +923,31 @@ void afficher_graph_suc_pred(struct tableau_liste_chainne tab){
 
 
 //le graphe dois etre fortement connexe pour que la recherche de la page rank converge ,,,n'est plus vrai maintenant
+
+/**
+ * @brief Calcule le vecteur PageRank d'un graphe via l'itération de puissance avec parallélisation OpenMP.
+ * 
+ * Effectue des itérations successives de multiplication matrice-vecteur pour converger vers le vecteur
+ * PageRank stable. Le calcul utilise le facteur d'amortissement ALPHA (par défaut 0.9) et ajoute une
+ * contribution uniforme pour les nœuds dangling (sans successeurs). Les itérations s'arrêtent lorsque
+ * la norme L1 entre deux itérations successives descend sous le seuil de convergence (EPSILON ou SMALL_EPSILON).
+ * 
+ * @param tableauSommets Tableau contiguë du graphe en format (predecesseur, successeur, probabilité)
+ * @param vecteur0 Vecteur initial des probabilités/poids de chaque sommet (de taille Nbsommet)
+ * @param tabD Tableau des nœuds dangling (sommets sans successeurs) utilisé pour renormalisation
+ * @param Nbsommet Nombre total de sommets du graphe
+ * @param Nbvaleurs Nombre total d'arcs dans le graphe
+ * @param nbiter Pointeur vers le compteur d'itérations (incrémenté à chaque itération)
+ * @param use_mall_epsilon Flag: 1 utilise SMALL_EPSILON (convergence stricte), 0 utilise EPSILON (convergence standard)
+ * 
+ * @return Pointeur vers le vecteur PageRank résultant (alloué dynamiquement, de taille Nbsommet)
+ * 
+ * @note Les opérations sont parallélisées avec OpenMP. Le vecteur d'entrée vecteur0 n'est pas modifié
+ *       directement ; un nouveau vecteur est alloué et retourné. L'appelant doit libérer le vecteur retourné.
+ *       Les CFCs non triviales (Nbsommet > 1) requièrent un appel préalable à recherchep_sans_surf() 
+ *       pour initialiser vecteur0 correctement.
+ */
 double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tableauD *tabD, int Nbsommet, int Nbvaleurs,int *nbiter,int use_mall_epsilon) {
-
-
-    
 
     double *vecteur1=malloc(Nbsommet*sizeof(double));
     memset(vecteur1, 0, Nbsommet * sizeof(double));
@@ -802,23 +1079,51 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
 }
 
 
+
+/**
+ * @brief Transforme la matrice d'adjacence en tableau de sous matrices correspondant aux composantes fortement connexes (CFC).
+ * 
+ * @param tableauSommets matricr du graphe sous forme tableau contigue predecesseur, successeur, probabilite
+ * @param nbsommet nombre de sommet dans le graphe 
+ * @param nbsommet_par_cfc nombre de sommets dans chaque composante fortement connexe
+ * @param numcfc_du_sommet numéro de la composante fortement connexe à laquelle appartient chaque sommet
+ * @param nbcfc nombre de composantes fortement connexes
+ * @param nbarcs nombre d'arcs dans le graphe
+ * @param resultat1 tableau de pointeurs vers les sous matrices correspondant aux composantes fortement connexes
+ * @param resultat2 tableau de pointeurs vers les tableaux contenant les informations sur le nombre d'arcs dans chaque composante fortement connexe
+ */
 void transformation_matrice(struct contigue* tableauSommets,int nbsommet,int * nbsommet_par_cfc,int* numcfc_du_sommet,int nbcfc,int nbarcs,struct contigue*** resultat1,int** resultat2){
-    
     // tableau de pointeur sur tableau contigue de sous mat cfc vertion liste chainne 
     struct neud_sommet_suc_prob **tableau_de_sousmatrice_cfc=malloc(nbcfc*sizeof(struct neud_sommet_suc_prob*));
+    if(tableau_de_sousmatrice_cfc==NULL){
+        printf("erreur allocation tableau_de_sousmatrice_cfc\n");
+        exit(1);
+    }
 
         for(int i=0;i<nbcfc;i++){
             tableau_de_sousmatrice_cfc[i]=NULL;
         }
  
     int * nb_succeseur_par_sommet=malloc(nbsommet*sizeof(int));// vas nous servire a savoir le nombre de succeseur de chaque sommet car on retiens pas sertens arcs car non meme cfc 
+        if(nb_succeseur_par_sommet==NULL){
+        printf("erreur allocation nb_succeseur_par_sommet\n");
+        exit(1);}
+
     memset(nb_succeseur_par_sommet,0,nbsommet*sizeof(int));
     
     double * probabilite_cummle_par_arc_supprime=malloc(nbsommet*sizeof(double));//la c'est les probas cumule des arcs non retenue 
+    if(probabilite_cummle_par_arc_supprime==NULL){
+        printf("erreur allocation probabilite_cummle_par_arc_supprime\n");
+        exit(1);}
+
     memset(probabilite_cummle_par_arc_supprime,0,nbsommet*sizeof(double));
 
 
+
     int * nbarcs_par_cfc=malloc(nbcfc*sizeof(int));
+    if(nbarcs_par_cfc==NULL){
+        printf("erreur allocation nbarcs_par_cfc\n");
+        exit(1);}
     memset(nbarcs_par_cfc,0,nbcfc*sizeof(int));
     //remplisage des sous matrices representé par une lise chainne pour linstant et non un tableau car on 
     //ne connais pas combien il y a de d'acs dans une cfc 
@@ -854,19 +1159,20 @@ void transformation_matrice(struct contigue* tableauSommets,int nbsommet,int * n
     }
 
 
-    printf("premiere partie faite\n");
 
     struct contigue **tableau_de_sousmatrice_cfc_contigue=malloc(nbcfc*sizeof(struct contigue*));
 
     if(tableau_de_sousmatrice_cfc_contigue==NULL){
-        printf("we got'em");
+        printf("erreur allocation tableau_de_sousmatrice_cfc_contigue\n");
+        exit(1);
     }
 
     for(int i=0;i<nbcfc;i++){
         tableau_de_sousmatrice_cfc_contigue[i]=malloc(nbarcs_par_cfc[i]*sizeof(struct contigue));
         
-            if(tableau_de_sousmatrice_cfc_contigue[i]==NULL){
-        printf("we got'em");
+        if(tableau_de_sousmatrice_cfc_contigue[i]==NULL){
+            printf("erreur allocation tableau_de_sousmatrice_cfc_contigue[%d]\n", i);
+            exit(1);
     }
 
         struct neud_sommet_suc_prob * temp=tableau_de_sousmatrice_cfc[i];
@@ -878,8 +1184,6 @@ void transformation_matrice(struct contigue* tableauSommets,int nbsommet,int * n
             temp=temp->suivant;
             j++;
         }
-
-     //   printf("la cfc %d\n",i);
     }
 
 
@@ -901,22 +1205,26 @@ free(probabilite_cummle_par_arc_supprime);
 
 
 
-//cette fonction vas nous creer un graphe concentre a partir du graphe initial en ne gardant que les arcs inter cfc, et toutes les probabilites sont a 0 et vont etre mis a jour apres
 /**
- * @brief 
+ * @brief Crée un graphe concentré où chaque CFC du graphe initial devient un sommet
+ *  et les arcs relient les CFCs entre elles avec des probabilités recalculées.
+ *  
+ *  Le graphe concentré est construit à partir du graphe initial en ne conservant que les arcs 
+ *  inter-CFC. La probabilité de chaque arc est calculée comme la somme des probabilités des arcs
+ *  inter-CFC du graphe initial qui partent de la même CFC source et arrivent à la même CFC 
+ *  destination, pondérée par les probabilités des sommets source dans vecteur0. Seuls les arcs
+ *  ayant une probabilité non-nulle sont conservés pour optimiser la convergence du calcul de PageRank.
  * 
- * @param tableauSommets 
- * @param vecteur0 
- * @param Nbsommets 
- * @param Nbarcs 
- * @param cfc 
- * @param nbcfc_totale 
- * @param nbsommets_par_cfc 
- * @param nbcfc_non_triviales 
- * @param graphe_concentre_result 
- * @param nb_arcs_graphe_concentre_result 
- * @param mapping_cfc_non_triviales_to_1 
- * @param mapping_1_to_cfc_non_triviales 
+ * @param tableauSommets Tableau contiguë du graphe initial (format: predecesseur, successeur, probabilité)
+ * @param vecteur0 Vecteur des probabilités/poids de chaque sommet du graphe initial
+ * @param Nbsommets Nombre total de sommets dans le graphe initial
+ * @param Nbarcs Nombre total d'arcs dans le graphe initial
+ * @param cfc Tableau de mapping: cfc[i] = numéro de CFC du sommet i
+ * @param nbcfc_totale Nombre total de composantes fortement connexes
+ * @param nbsommets_par_cfc Tableau: nbsommets_par_cfc[i] = nombre de sommets dans la CFC i
+ * @param graphe_concentre_result Pointeur de sortie: tableau contiguë du graphe concentré
+ * @param nb_arcs_graphe_concentre_result Pointeur de sortie: nombre d'arcs dans le graphe concentré
+ * @param tabD_result Pointeur de sortie: tableau des CFCs sans successeurs (dangling nodes)
  */
 void graphe_concentre(struct contigue* tableauSommets,double * vecteur0,int Nbsommets,int Nbarcs,int * cfc,int nbcfc_totale, int * nbsommets_par_cfc,struct contigue ** graphe_concentre_result, int * nb_arcs_graphe_concentre_result,struct tableauD * tabD_result){
 
@@ -1013,25 +1321,25 @@ void graphe_concentre(struct contigue* tableauSommets,double * vecteur0,int Nbso
         tableau_proba_cumule_par_cfc[graphe_concentre[i].pred-1]+=graphe_concentre[i].probabilite;
     }
 
-    printf("la proba cumule pour la cfc 1 est %f\n",tableau_proba_cumule_par_cfc[1]);
-    for(int i=0;i<nbcfc_totale;i++){
-        if(tableau_proba_cumule_par_cfc[i]!=1&&tableau_proba_cumule_par_cfc[i]!=0){
-            printf("we got a problem in the renormalisation of the graphe concentre %lf %d\n",tableau_proba_cumule_par_cfc[i],i);
-        }
-        else if(tableau_proba_cumule_par_cfc[i]==0){
-            int j=0;
-            while(j<tabD.Nbsommet){
-                if(tabD.tabD[j]==i){
-                    break;
-                }
-                j++;
-            }
-            if(j==tabD.Nbsommet){
-                printf("we got a problem in the construction of the tableau D for cfc %d\n",i);
-                exit(1);
-            }
-        }
-    }
+    // printf("la proba cumule pour la cfc 1 est %f\n",tableau_proba_cumule_par_cfc[1]);
+    // for(int i=0;i<nbcfc_totale;i++){
+    //     if(tableau_proba_cumule_par_cfc[i]!=1&&tableau_proba_cumule_par_cfc[i]!=0){
+    //         printf("we got a problem in the renormalisation of the graphe concentre %lf %d\n",tableau_proba_cumule_par_cfc[i],i);
+    //     }
+    //     else if(tableau_proba_cumule_par_cfc[i]==0){
+    //         int j=0;
+    //         while(j<tabD.Nbsommet){
+    //             if(tabD.tabD[j]==i){
+    //                 break;
+    //             }
+    //             j++;
+    //         }
+    //         if(j==tabD.Nbsommet){
+    //             printf("we got a problem in the construction of the tableau D for cfc %d\n",i);
+    //             exit(1);
+    //         }
+    //     }
+    // }
 
     free(tableau_cfcsucceseur);
     free(tableau_proba_cumule_par_cfc);
@@ -1097,21 +1405,9 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
+struct contigue *tableauSommets = lecturefichier_matrixm("wiki2.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
-
-
-
-
-
-
-
-
-// afficher_graph_suc_pred(graph_suc);
-
-// printf("les predecesseurs");
-// afficher_graph_suc_pred(graph_pred);
 
 
 
@@ -1170,36 +1466,6 @@ memset(vecteur0,0,Nbsommet*sizeof(double));
 int * cfc_traite=malloc(nbcfc*sizeof(double));
 
 memset(cfc_traite,0,nbcfc*sizeof(int));
-
-
-// //on donne le numero de la cfc et il nous rend le numero de la cfc dans l'espace reduit commancant par 0
-// int * mapping_cfc_non_triviales_to_1=malloc(nbcfc*sizeof(int));
-// memset(mapping_cfc_non_triviales_to_1,-1,nbcfc*sizeof(int));
-
-// int * mapping_1_to_cfc_non_triviales=malloc(nbcfc*sizeof(int));
-// memset(mapping_1_to_cfc_non_triviales,-1,nbcfc*sizeof(int));
-
-// int index_non_triviale=1;
-
-// for(int i=0;i<Nbsommet;i++){
-//     int numero_cfc=cfc[i];
-//     if(nb_sommets_par_cfc[numero_cfc]>1)
-//         vecteur0[i]=1.0/nb_sommets_par_cfc[numero_cfc];// pour les cfc non triviale on initialise le vecteur de base a la distribution uniforme pour que la recherche du page rank local converge plus vite
-//         if(cfc_traite[numero_cfc]==0){
-//         cfc_traite[numero_cfc]=1;
-//         if(nb_sommets_par_cfc[numero_cfc]>1){
-//             mapping_cfc_non_triviales_to_1[numero_cfc]=index_non_triviale;
-//             mapping_1_to_cfc_non_triviales[index_non_triviale]=numero_cfc;
-//             index_non_triviale++;
-//         }
-//     }
-// }
-
-// mapping_1_to_cfc_non_triviales = realloc(mapping_1_to_cfc_non_triviales,index_non_triviale*sizeof(int));
-
-
-
-
 
 
 
@@ -1337,7 +1603,7 @@ free(nbarcs_par_cfc);
 
 printf("combinaison done\n");
 
-double a = 0.1; // à tuner entre 0 et 1
+double a = 0.5; // à tuner entre 0 et 1
 
 for(int i=0;i<Nbsommet;i++){
     int cfc_sommet = cfc[i];
