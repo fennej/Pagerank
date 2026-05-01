@@ -17,7 +17,8 @@ typedef struct successeur{
  double SMALL_EPSILON = 0.00000001;
  double ALPHA=0.9;
 double sum=0;
- int NUM_THREADS=30;
+int NUM_THREADS=30;
+double TRESHOLD= 0.00001;
 
 struct tableauD{
     int *tabD;
@@ -120,9 +121,12 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
         for(int i=0;i<*Nbval;i++){
         int pred=0,suc=0;
         
-        fscanf(file, "%d %d", &pred, &suc);
-        
-      
+        //fscanf(file, "%d %d", &pred, &suc);
+        // Lire avec fgets (plus safe)
+        char line[256];
+        fgets(line, sizeof(line), file);
+        sscanf(line, "%d %d", &pred, &suc);  // Prend que les 2 premiers valeurs 
+            
         graphe_suc->tab[pred-1]=stack(graphe_suc->tab[pred-1],suc); //ici stack joue le role de inser tete 
         graphe_pred->tab[suc-1]=stack(graphe_pred->tab[suc-1],pred);
 
@@ -152,85 +156,128 @@ struct contigue * lecturefichier_matrixm(const char* filename,int *NbLignes,int 
 }
 
 
-struct contigue * lecturefichier_matrixm_with_proba(const char* filename,int *NbLignes,int *Nbcol, int *Nbval,struct tableauD** tabD,struct tableau_liste_chainne* graphe_suc,struct tableau_liste_chainne* graphe_pred){
-    FILE* file = fopen(filename, "r");
-    if (file == NULL) {
-        printf("Erreur ouverture fichier\n");
-        return NULL;
+
+/**
+ * @brief clacule le seuil dynamique pour la suppression des epsilon transitions dans le graphe de PageRank.
+ */
+double dynamic_threshold(struct contigue *tableauSommets, int Nbvaleurs) {
+    // Calcul moyenne
+    double mean = 0;
+    for(int i = 0; i < Nbvaleurs; i++) {
+        mean += tableauSommets[i].probabilite;
     }
+    mean /= Nbvaleurs;
+    
+    // Calcul variance et écart-type
+    double variance = 0;
+    for(int i = 0; i < Nbvaleurs; i++) {
+        double diff = tableauSommets[i].probabilite - mean;
+        variance += diff * diff;
+    }
+    variance /= Nbvaleurs;
+    double sigma = sqrt(variance);
+    
+    // Seuil dynamique
+    double threshold = mean - 2 * sigma;
+    
+    return threshold;
+}
 
 
+void suppression_epsilon_transitions( struct contigue** tableauSommets,int Nbsommets,int* Nbvaleurs,struct tableauD* tabD, struct tableau_liste_chainne* graph_suc, struct tableau_liste_chainne* graph_pred,int use_dynamic_threshold){
+    double threshold;
+    if(use_dynamic_threshold){
+         threshold=dynamic_threshold(*tableauSommets,*Nbvaleurs);
+    }else{
+         threshold=TRESHOLD;
+    }
+    printf("Seuil de suppression des epsilon transitions: %lf\n", threshold);
 
-    double prob;
-    char buffer[100];
-    while(fgets(buffer,sizeof(buffer),file)!=NULL){
-        if(buffer[0]=='%'){
-            continue;
+    struct contigue* new_tableauSommets=malloc((*Nbvaleurs)*sizeof(struct contigue));
+    int newnbvaleurs=0;    
+    struct tableauD new_tabD;
+    new_tabD.tabD=malloc(Nbsommets*sizeof(int));
+    memset(new_tabD.tabD, 0, Nbsommets*sizeof(int));
+    new_tabD.Nbsommet=0;
+
+
+    int * nb_sucasseur_par_sommet=malloc(Nbsommets*sizeof(int));
+    memset(nb_sucasseur_par_sommet, 0, Nbsommets*sizeof(int));
+
+
+    for(int i=0;i<*Nbvaleurs;i++){
+        if((*tableauSommets)[i].probabilite>=threshold){
+            new_tableauSommets[newnbvaleurs].pred=(*tableauSommets)[i].pred;
+            new_tableauSommets[newnbvaleurs].suc=(*tableauSommets)[i].suc;
+            new_tableauSommets[newnbvaleurs].probabilite=(*tableauSommets)[i].probabilite;
+            nb_sucasseur_par_sommet[(*tableauSommets)[i].pred-1]++;
+            newnbvaleurs++;
         }else{
-    char temp;
-        sscanf(buffer,"%d %d %d",NbLignes,Nbcol,Nbval);
-        break;
+            printf("suppresed");
+            // suppression de l'arc dans les graphes de successeurs et de prédécesseurs
+            int pred=(*tableauSommets)[i].pred;
+            int suc=(*tableauSommets)[i].suc;
+
+            // suppression dans graph_suc
+            struct list_chainne_de_sommet* current=graph_suc->tab[pred-1];
+            struct list_chainne_de_sommet* prev=NULL;
+            while(current!=NULL){
+                if(current->sommet==suc){
+                    if(prev==NULL){
+                        graph_suc->tab[pred-1]=current->suiv;
+                    }else{
+                        prev->suiv=current->suiv;
+                    }
+                    free(current);
+                    break;
+                }else{
+                    prev=current;
+                    current=current->suiv;
+                }
+            }
+            if(current==NULL){
+                printf("Erreur: arc (%d -> %d) non trouvé dans graph_suc\n", pred, suc);
+            }
+
+            // suppression dans graph_pred
+            current=graph_pred->tab[suc-1];
+            prev=NULL;
+            while(current!=NULL){
+                if(current->sommet==pred){
+                    if(prev==NULL){
+                        graph_pred->tab[suc-1]=current->suiv;
+                    }else{
+                        prev->suiv=current->suiv;
+                    }
+                    free(current);
+                    break;
+                }
+                prev=current;
+                current=current->suiv;
+            }
+            if(current==NULL){
+                printf("Erreur: arc (%d -> %d) non trouvé dans graph_pred\n", pred, suc);
+            }
         }
     }
 
-     double *nbsuc =malloc(*NbLignes*sizeof(double));
-     for(int i=0;i<*NbLignes;i++){
-        nbsuc[i]=0;
-     }
-
-     (*tabD)->tabD=malloc(*NbLignes*sizeof(int));
-     for(int i=0;i<*NbLignes;i++){
-        (*tabD)->tabD[i]=0;
-     }
-     (*tabD)->Nbsommet=0;
-
-     
-    struct contigue *tabcontigue=malloc(*Nbval*sizeof(struct contigue));
-    (*graphe_suc).tab=malloc(*Nbcol*sizeof(struct list_chainne_de_sommet*));
-    (*graphe_pred).tab=malloc(*Nbcol*sizeof(struct list_chainne_de_sommet*));
-
-     for(int i=0;i<*Nbcol;i++){
-        graphe_pred->tab[i]=NULL;
-        graphe_suc->tab[i]=NULL;
-     }
-     graphe_pred->Nbsommet=*Nbcol;
-
-     graphe_suc->Nbsommet=*Nbcol;
-
-
-        for(int i=0;i<*Nbval;i++){
-        int pred=0,suc=0;
-        
-        fscanf(file, "%d %d %lf", &pred, &suc, &prob);
-        graphe_suc->tab[pred-1]=stack(graphe_suc->tab[pred-1],suc); //ici stack joue le role de inser tete 
-        graphe_pred->tab[suc-1]=stack(graphe_pred->tab[suc-1],pred);
-
-        tabcontigue[i].pred=pred;
-        tabcontigue[i].suc=suc;
-        nbsuc[pred-1]++;
-        
-    }
-   // affichertab(tableauSommets,*NbLignes);
-
-// si on met une distribution uniforme sur le sommet si il a des sucesseurs ou bien on met c'est un dargling node et au quelle cas le tabD est a 1 au sommet 
-   for(int i=0;i<*NbLignes;i++){
-    if(nbsuc[i]>0)
-    nbsuc[i]=1.0/nbsuc[i];
-    else{
-        (*tabD)->tabD[(*tabD)->Nbsommet]=i;
-        (*tabD)->Nbsommet++;
-    }
-   }
-
-
-    for(int i=0;i<*Nbval;i++){
-        tabcontigue[i].probabilite=nbsuc[tabcontigue[i].pred-1];
+    for(int i=0;i<Nbsommets;i++){
+        if(nb_sucasseur_par_sommet[i]==0){
+            new_tabD.tabD[new_tabD.Nbsommet]=i;
+            new_tabD.Nbsommet++;
+        }
     }
 
-    return tabcontigue;
+    new_tableauSommets = realloc(new_tableauSommets, newnbvaleurs * sizeof(struct contigue));
+    new_tabD.tabD= realloc(new_tabD.tabD, new_tabD.Nbsommet * sizeof(int));
+
+    free(tabD->tabD);
+    free(*tableauSommets);
+    *tableauSommets=new_tableauSommets;
+    *Nbvaleurs=newnbvaleurs;
+    *tabD= new_tabD;
+
 }
-
-
 
 void afficherliste(Successeur s){
     while(s!=NULL){
@@ -238,7 +285,6 @@ void afficherliste(Successeur s){
         s=s->suivant;
     }
 }
-
 
 
 void affichertab(struct successeur** tableau,int Nbsomments){
@@ -1405,11 +1451,11 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki2.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
+struct contigue *tableauSommets = lecturefichier_matrixm("Harvard500.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 
-
+suppression_epsilon_transitions(&tableauSommets,Nbsommet,&Nbval,tabD,&graph_suc,&graph_pred,1);
 
 
 int nbcfc;// nombre de composantes fortement connexes
@@ -1434,8 +1480,6 @@ for(int i=0;i<Nbsommet;i++){
     }
 
 }
-
-
 
 
 printf("kosaraju done\n");  
