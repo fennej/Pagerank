@@ -821,6 +821,12 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     int predecesseurs;//est utilise dans la deuxiemme partie de cette algo 
     *nb_sommets_par_cfc=malloc(nbsommets*sizeof(int));//on ne sais pas combien de cfc on vas trouver donc on alloue pour le pire cas ou chaque sommet est une cfc et on vas desalouer apres;
     memset(*nb_sommets_par_cfc,0,nbsommets*sizeof(int));
+    struct list_chainne_de_sommet** vecteur_acceleration_pred=malloc(nbsommets*sizeof(struct list_chainne_de_sommet*));
+   
+    for(int i=0;i<nbsommets;i++){
+        vecteur_acceleration_pred[i]=graph_pred.tab[i];
+    }
+
 
     int c=0;
     int index_visited=0;
@@ -887,8 +893,8 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
                 if(visited[sommet_courant]==-1)
                 (*nb_sommets_par_cfc)[cfc_counter]++;
                 visited[sommet_courant]=cfc_counter;//visited prend la valeur du numero de la cfc 
-                successeur=graph_pred.tab[sommet_courant];
-
+                successeur=vecteur_acceleration_pred[sommet_courant];//pour accelerer la recherche des predecesseurs on utilise un vecteur d'acceleration qui contient les predecesseurs de chaque sommet
+                
 
                 // printf("cfc counter est %d\n",cfc_counter);
                 // printf("le sommet courant:%d\n",sommet_courant);
@@ -900,7 +906,7 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
                 while(successeur!=NULL&&visited[successeur->sommet-1]!=-1){
                     successeur=successeur->suiv;
                 }
-                
+                vecteur_acceleration_pred[sommet_courant]=successeur;//pour accelerer la recherche des predecesseurs on utilise un vecteur d'acceleration qui contient les predecesseurs de chaque sommet et on le met a jour a chaque fois qu'on cherche un predecesseur non visité pour ne pas refaire la recherche a partir du debut de la liste chaînée des predecesseurs
        
 
                 // printf("etat de suc \n");
@@ -928,6 +934,7 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     (*nb_sommets_par_cfc)=realloc((*nb_sommets_par_cfc),(*nbcfc)*sizeof(int));
     libmemstack(&stack_visited);
     libmemstack(&stack_iterations);
+    free(vecteur_acceleration_pred);
     return visited;
 }
 
@@ -1472,7 +1479,11 @@ Nbsommet=Nblignes;
 int nbcfc;// nombre de composantes fortement connexes
 int *nb_sommets_par_cfc;
 
+
+double start = omp_get_wtime();
 int* cfc=kosaraju(graph_suc,graph_pred,Nbsommet,&nbcfc,&nb_sommets_par_cfc);//cfc[i] est le numero de la composante fortement connexe du sommet i+1
+double end = omp_get_wtime();
+printf("temps d'execution de kosaraju: %f secondes\n", end - start);
 
 
 for(int i=0;i<Nbsommet;i++){
