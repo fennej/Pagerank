@@ -14,7 +14,8 @@ typedef struct successeur{
 }*Successeur;
 
  double EPSILON = 0.0000001;
- double SMALL_EPSILON = 0.00000001;
+ double SMALL_EPSILON = 0.000000001;
+ double BIG_EPSILON = 0.0001;
  double ALPHA=0.9;
 double sum=0;
 
@@ -367,18 +368,21 @@ void afficher_vecteur(double *vecteur, int Nbsommet) {
  void multvectmmat_old_sans_surf(struct contigue* tableauSommets,double* vecteur1, double *vecteur0,int Nbarcs, int Nbsommet, int Nbsommet_globale, int Nbvaleurs) {
     // float *vecteur1=malloc(Nbsommet*sizeof(float));
    #pragma omp single
+   {
     memcpy(vecteur1,vecteur0,Nbsommet_globale*sizeof(double));
-    
+
+    }
+
     #pragma omp for
     for(int i=0;i<Nbarcs;i++){
-        int t=tableauSommets[i].suc-1;
-        #pragma omp critical
-        vecteur1[t]=0;
-    }// ici ce quon fait c'est que on le vecteur 1 dois recevoir une copie du vecteur 0 sauf pour les sommet de la cfc actuelle qu'on dois chercher a calculer la distribution stat 
-    
+        #pragma omp atomic write
+        vecteur1[tableauSommets[i].suc-1]=0;
+    }
+
+
+
     #pragma omp for
     for(int i=0;i<Nbvaleurs;i++){
-        double sum=0.0;
         int pred=tableauSommets[i].pred;
         int suc=tableauSommets[i].suc;
         double prob=tableauSommets[i].probabilite;
@@ -988,13 +992,19 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
 }
 
 
-double norme_a1_old(double *vecteur1, double *vecteur0, int Nbsommet) {
-    double sum=0.0;
+void norme_a1_old(double *vecteur1, double *vecteur0, int Nbsommet,double* resulat) {
+    #pragma omp single 
+    sum=0.0;
+    #pragma omp for reduction(+:sum)
     for(int i=0;i<Nbsommet;i++){
         sum+=fabs(vecteur1[i]-vecteur0[i]);
        // printf("sum=%lf",sum);
     }
-    return sum;
+    #pragma omp single
+    {
+       // printf("Norme L1: %lf\n", sum);
+        *resulat=sum;
+    }    
 }
 
 
@@ -1003,7 +1013,7 @@ double * recherchep_sans_surf(struct contigue* tableauSommets, double *vecteur0,
     memcpy(vecteur1,vecteur0,Nbsommet_globale*sizeof(double));
     int cpt=0; //pour arreter ce page rank
     int stop=0;
-
+    double norme=0.0;
 omp_set_num_threads(NUM_THREADS);
 #pragma omp parallel
 {
@@ -1013,7 +1023,7 @@ omp_set_num_threads(NUM_THREADS);
     for(int i=0;i<Nbarcs;i++){
         int t=tableauSommets[i].suc-1;
        
-        #pragma omp critical
+        #pragma omp atomic write 
         vecteur1[t]=0;
     }// ici ce quon fait c'est que on le vecteur 1 dois recevoir une copie du vecteur 0 sauf pour les sommet de la cfc actuelle qu'on dois chercher a calculer la distribution stat 
     // donc on dois mettre un 0  a ces sommets 
@@ -1023,7 +1033,6 @@ omp_set_num_threads(NUM_THREADS);
     if(vecteur1==NULL){
         printf("erreur allocation vecteur1\n");
         exit(1);}
-
 
 
     multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbarcs,Nbsommet,Nbsommet_globale,Nbvaleurs);
@@ -1044,10 +1053,11 @@ omp_set_num_threads(NUM_THREADS);
         // clock_t start = clock();
         
         multvectmmat_old_sans_surf(tableauSommets,vecteur1,vecteur0,Nbarcs,Nbsommet,Nbsommet_globale,Nbvaleurs);
+        norme_a1_old(vecteur1,vecteur0,Nbsommet_globale,&norme);
 
         #pragma omp single
         {
-        if( norme_a1_old(vecteur1,vecteur0,Nbsommet_globale)<EPSILON||cpt>2){
+        if( norme<BIG_EPSILON||cpt>50){
             stop=1;
         }
         }
@@ -1205,6 +1215,110 @@ double * recherchep(struct contigue* tableauSommets, double *vecteur0,struct tab
  * @param resultat1 tableau de pointeurs vers les sous matrices correspondant aux composantes fortement connexes
  * @param resultat2 tableau de pointeurs vers les tableaux contenant les informations sur le nombre d'arcs dans chaque composante fortement connexe
  */
+/**
+ * @brief Version optimisée de transformation_matrice : pas de liste chaînée intermédiaire, malloc une seule fois
+ * 
+ * Approche 3-pass :
+ * 1. Compter les arcs par CFC et accumuler les probabilités supprimées
+ * 2. Allouer une seule fois les tableaux pour chaque CFC
+ * 3. Remplir directement les tableaux contiguës
+ */
+void transformation_matrice_rapide(struct contigue* tableauSommets,int nbsommet,int * nbsommet_par_cfc,int* numcfc_du_sommet,int nbcfc,int nbarcs,struct contigue*** resultat1,int** resultat2){
+    
+    // PASS 1 : Compter les arcs par CFC et accumuler les probas supprimées
+    int * nbarcs_par_cfc=malloc(nbcfc*sizeof(int));
+    if(nbarcs_par_cfc==NULL){
+        printf("erreur allocation nbarcs_par_cfc\n");
+        exit(1);
+    }
+    memset(nbarcs_par_cfc,0,nbcfc*sizeof(int));
+    
+    int * nb_succeseur_par_sommet=malloc(nbsommet*sizeof(int));
+    if(nb_succeseur_par_sommet==NULL){
+        printf("erreur allocation nb_succeseur_par_sommet\n");
+        exit(1);
+    }
+    memset(nb_succeseur_par_sommet,0,nbsommet*sizeof(int));
+    
+    double * probabilite_cummle_par_arc_supprime=malloc(nbsommet*sizeof(double));
+    if(probabilite_cummle_par_arc_supprime==NULL){
+        printf("erreur allocation probabilite_cummle_par_arc_supprime\n");
+        exit(1);
+    }
+    memset(probabilite_cummle_par_arc_supprime,0,nbsommet*sizeof(double));
+
+    for(int i=0;i<nbarcs;i++){
+        int sommet=tableauSommets[i].pred;
+        int successeur=tableauSommets[i].suc;
+        double probabilite=tableauSommets[i].probabilite;
+        
+        int numero_cfc=numcfc_du_sommet[sommet-1];
+        int numero_cfc_successeur=numcfc_du_sommet[successeur-1];
+
+        if(numero_cfc!=numero_cfc_successeur){
+            probabilite_cummle_par_arc_supprime[sommet-1]+=probabilite;
+            continue;
+        }
+        
+        nb_succeseur_par_sommet[sommet-1]++;
+        nbarcs_par_cfc[numero_cfc]++;
+    }
+
+    // ALLOUER une seule fois pour chaque CFC
+    struct contigue **tableau_de_sousmatrice_cfc_contigue=malloc(nbcfc*sizeof(struct contigue*));
+    if(tableau_de_sousmatrice_cfc_contigue==NULL){
+        printf("erreur allocation tableau_de_sousmatrice_cfc_contigue\n");
+        exit(1);
+    }
+
+    int *index_insertion=malloc(nbcfc*sizeof(int));
+    if(index_insertion==NULL){
+        printf("erreur allocation index_insertion\n");
+        exit(1);
+    }
+    memset(index_insertion,0,nbcfc*sizeof(int));
+
+    for(int i=0;i<nbcfc;i++){
+        if(nbarcs_par_cfc[i]>0){
+            tableau_de_sousmatrice_cfc_contigue[i]=malloc(nbarcs_par_cfc[i]*sizeof(struct contigue));
+            if(tableau_de_sousmatrice_cfc_contigue[i]==NULL){
+                printf("erreur allocation tableau_de_sousmatrice_cfc_contigue[%d]\n", i);
+                exit(1);
+            }
+        } else {
+            tableau_de_sousmatrice_cfc_contigue[i]=NULL;
+        }
+    }
+
+    // PASS 2 : Remplir directement les tableaux
+    for(int i=0;i<nbarcs;i++){
+        int sommet=tableauSommets[i].pred;
+        int successeur=tableauSommets[i].suc;
+        double probabilite=tableauSommets[i].probabilite;
+        
+        int numero_cfc=numcfc_du_sommet[sommet-1];
+        int numero_cfc_successeur=numcfc_du_sommet[successeur-1];
+
+        if(numero_cfc!=numero_cfc_successeur) continue;
+
+        int idx=index_insertion[numero_cfc];
+        tableau_de_sousmatrice_cfc_contigue[numero_cfc][idx].pred=sommet;
+        tableau_de_sousmatrice_cfc_contigue[numero_cfc][idx].suc=successeur;
+        tableau_de_sousmatrice_cfc_contigue[numero_cfc][idx].probabilite=probabilite+probabilite_cummle_par_arc_supprime[sommet-1]/nb_succeseur_par_sommet[sommet-1];
+        
+        index_insertion[numero_cfc]++;
+    }
+
+    free(nb_succeseur_par_sommet);
+    free(probabilite_cummle_par_arc_supprime);
+    free(index_insertion);
+
+    *resultat1=tableau_de_sousmatrice_cfc_contigue;
+    *resultat2=nbarcs_par_cfc;
+}
+
+
+
 void transformation_matrice(struct contigue* tableauSommets,int nbsommet,int * nbsommet_par_cfc,int* numcfc_du_sommet,int nbcfc,int nbarcs,struct contigue*** resultat1,int** resultat2){
     // tableau de pointeur sur tableau contigue de sous mat cfc vertion liste chainne 
     struct neud_sommet_suc_prob **tableau_de_sousmatrice_cfc=malloc(nbcfc*sizeof(struct neud_sommet_suc_prob*));
@@ -1570,7 +1684,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 struct contigue *tableauSommets = lecturefichier_matrixm("wiki2.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred,1);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
-
+double start_time = omp_get_wtime();
 //suppression_epsilon_transitions(&tableauSommets,Nbsommet,&Nbval,tabD,&graph_suc,&graph_pred,1);
 
 
@@ -1578,10 +1692,7 @@ int nbcfc;// nombre de composantes fortement connexes
 int *nb_sommets_par_cfc;
 
 
-double start = omp_get_wtime();
 int* cfc=kosaraju(graph_suc,graph_pred,Nbsommet,&nbcfc,&nb_sommets_par_cfc);//cfc[i] est le numero de la composante fortement connexe du sommet i+1
-double end = omp_get_wtime();
-printf("temps d'execution de kosaraju: %f secondes\n", end - start);
 
 
 struct contigue **tableau_de_sousmatrice_cfc_contigue;
@@ -1601,13 +1712,11 @@ printf("le nombre de cfc est %d\n", nbcfc);
 libmem_grapth_sucpred(graph_suc, graph_pred); // Libération de la mémoire des graphes de successeurs et prédécesseurs après l'extraction des CFCs
 
 }
-
-
-
-
 #pragma omp section
 {   
-transformation_matrice(tableauSommets,Nbsommet,nb_sommets_par_cfc,cfc,nbcfc,Nbval,&tableau_de_sousmatrice_cfc_contigue,&nbarcs_par_cfc);
+//transformation_matrice(tableauSommets,Nbsommet,nb_sommets_par_cfc,cfc,nbcfc,Nbval,&tableau_de_sousmatrice_cfc_contigue,&nbarcs_par_cfc);
+    
+transformation_matrice_rapide(tableauSommets,Nbsommet,nb_sommets_par_cfc,cfc,nbcfc,Nbval,&tableau_de_sousmatrice_cfc_contigue,&nbarcs_par_cfc);
 }
 }
 
@@ -1635,17 +1744,17 @@ for(int i=0;i<Nbsommet;i++){
         vecteur0[i]=1.0/nb_sommets_par_cfc[numero_cfc];// pour les cfc non triviale on initialise le vecteur de base a la distribution uniforme pour que la recherche du page rank local converge plus vite
 }
 
-double test=0;
-for(int i=0;i<Nbsommet;i++){
-    test+=vecteur0[i];
-}
+// double test=0;
+// for(int i=0;i<Nbsommet;i++){
+//     test+=vecteur0[i];
+// }
 
-printf("la somme des elements du vecteur0 est %f\n", test);
-printf("dois ertre egale a %d\n", nbcfc);
-
-
+// printf("la somme des elements du vecteur0 est %f\n", test);
+// printf("dois ertre egale a %d\n", nbcfc);
 
 
+
+double start_time_recherche_sans_surf = omp_get_wtime();
 
 for (int i=0;i<nbcfc;i++){
     if(nb_sommets_par_cfc[i]>70){
@@ -1659,12 +1768,15 @@ for (int i=0;i<nbcfc;i++){
     }
 }
 
-printf("recherche sans surf done\n");
-        sum=0;
-    for(int i=0;i<Nbsommet;i++){
-        sum+=vecteur0[i];
-    }   
-    printf("la somme des elements du vecteur0 est %f\n", sum);
+double end_time_recherche_sans_surf = omp_get_wtime();
+printf("Temps d'exécution de la recherche sans surf : %f secondes\n", end_time_recherche_sans_surf - start_time_recherche_sans_surf);
+
+// printf("recherche sans surf done\n");
+//         sum=0;
+//     for(int i=0;i<Nbsommet;i++){
+//         sum+=vecteur0[i];
+//     }   
+//     printf("la somme des elements du vecteur0 est %f\n", sum);
 
 
 int nbiter=0;
@@ -1708,10 +1820,10 @@ vecteur_graph_reduit=recherchep(graphe_conc,
 
 double titi=0;
 
-for(int i=0;i<nbcfc;i++){
-    titi+=vecteur_graph_reduit[i];
-}
-printf("la somme des elements du vecteur_graph_reduit est %f\n", titi);
+// for(int i=0;i<nbcfc;i++){
+//     titi+=vecteur_graph_reduit[i];
+// }
+// printf("la somme des elements du vecteur_graph_reduit est %f\n", titi);
 
 
 for(int i=0;i<nbcfc;i++){
@@ -1733,21 +1845,26 @@ for(int i=0;i<Nbsommet;i++){
     vecteur0[i] *= a * poids_structure + (1-a) * poids_taille;
 }
 
-double papa=0;
-for(int i=0;i<Nbsommet;i++){   
-    papa+=vecteur0[i];
-}
-printf("Somme finale: %f\n", papa);
+// double papa=0;
+// for(int i=0;i<Nbsommet;i++){   
+//     papa+=vecteur0[i];
+// }
+// printf("Somme finale: %f\n", papa);
 
 
 
 nbiter=0;
 vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter,0);
 
+double end_time = omp_get_wtime();  
+printf("Temps d'exécution total : %f secondes\n", end_time - start_time);
+
  double somme=0;
 for(int i=0;i<Nbsommet;i++){
     somme+=vecteur0[i];
 }
+
+
 
 printf("FIN la somme des elements du vecteur0 est %f\n", somme);
 
