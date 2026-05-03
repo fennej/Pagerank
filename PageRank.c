@@ -1521,6 +1521,24 @@ void dump_graphe_concentre(struct contigue* graphe_concentre, int nb_arcs, int n
     printf("Graphe concentré dumped dans: %s\n", nom_fichier);
 }
 
+void libmem_grapth_sucpred(struct tableau_liste_chainne graph_suc, struct tableau_liste_chainne graph_pred){
+    for(int i=0;i<graph_suc.Nbsommet;i++){
+        struct list_chainne_de_sommet* temp=  graph_suc.tab[i];
+        while(graph_suc.tab[i]!=NULL){
+            graph_suc.tab[i]=graph_suc.tab[i]->suiv;
+            free(temp);
+            temp=graph_suc.tab[i];
+        }
+
+        temp=  graph_pred.tab[i];
+        while(graph_pred.tab[i]!=NULL){
+            graph_pred.tab[i]=graph_pred.tab[i]->suiv;
+            free(temp);
+            temp=graph_pred.tab[i];
+        }
+
+    }
+}
 
 int main(){
 
@@ -1549,7 +1567,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred,1);
+struct contigue *tableauSommets = lecturefichier_matrixm("wiki2.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred,1);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 
@@ -1566,23 +1584,8 @@ double end = omp_get_wtime();
 printf("temps d'execution de kosaraju: %f secondes\n", end - start);
 
 
-for(int i=0;i<Nbsommet;i++){
-    struct list_chainne_de_sommet* temp=  graph_suc.tab[i];
-    while(graph_suc.tab[i]!=NULL){
-        graph_suc.tab[i]=graph_suc.tab[i]->suiv;
-        free(temp);
-        temp=graph_suc.tab[i];
-    }
-
-        temp=  graph_pred.tab[i];
-    while(graph_pred.tab[i]!=NULL){
-        graph_pred.tab[i]=graph_pred.tab[i]->suiv;
-        free(temp);
-        temp=graph_pred.tab[i];
-    }
-
-}
-
+struct contigue **tableau_de_sousmatrice_cfc_contigue;
+int *nbarcs_par_cfc;
 
 printf("kosaraju done\n");  
 
@@ -1590,13 +1593,23 @@ printf("kosaraju done\n");
 printf("le nombre de sommets est %d\n", Nbsommet);
 printf("le nombre de cfc est %d\n", nbcfc);
 
+#pragma omp parallel sections
+{
+
+#pragma omp section
+{
+libmem_grapth_sucpred(graph_suc, graph_pred); // Libération de la mémoire des graphes de successeurs et prédécesseurs après l'extraction des CFCs
+
+}
 
 
-struct contigue **tableau_de_sousmatrice_cfc_contigue;
-int *nbarcs_par_cfc;
+
+
+#pragma omp section
+{   
 transformation_matrice(tableauSommets,Nbsommet,nb_sommets_par_cfc,cfc,nbcfc,Nbval,&tableau_de_sousmatrice_cfc_contigue,&nbarcs_par_cfc);
-
-
+}
+}
 
 
 struct contigue * graphe_conc;
@@ -1614,13 +1627,7 @@ int * cfc_traite=malloc(nbcfc*sizeof(double));
 
 memset(cfc_traite,0,nbcfc*sizeof(int));
 
-
-
-printf("la somme des elements du vecteur0 est %f\n", sum);
-printf("le nombre de cfc de base est %d\n", nbcfc);
-
 //===========================================
-
 
 
 for(int i=0;i<Nbsommet;i++){
@@ -1628,18 +1635,16 @@ for(int i=0;i<Nbsommet;i++){
         vecteur0[i]=1.0/nb_sommets_par_cfc[numero_cfc];// pour les cfc non triviale on initialise le vecteur de base a la distribution uniforme pour que la recherche du page rank local converge plus vite
 }
 
-
-sum=0;
+double test=0;
 for(int i=0;i<Nbsommet;i++){
-    sum+=vecteur0[i];
+    test+=vecteur0[i];
 }
 
-printf("la somme des elements du vecteur0 est %f\n", sum);
+printf("la somme des elements du vecteur0 est %f\n", test);
 printf("dois ertre egale a %d\n", nbcfc);
 
 
 
-int cc=0;
 
 
 for (int i=0;i<nbcfc;i++){
@@ -1655,8 +1660,6 @@ for (int i=0;i<nbcfc;i++){
 }
 
 printf("recherche sans surf done\n");
-
-
         sum=0;
     for(int i=0;i<Nbsommet;i++){
         sum+=vecteur0[i];
@@ -1681,9 +1684,6 @@ graphe_concentre(tableauSommets,
 );
 
 printf("graphe concentre done\n");
-
-dump_graphe_concentre(graphe_conc, nb_arcs_graphe_conc, nbcfc, "graphe_concentre.txt");
-printf("graphe concentre dumped\n");
 
 
 double ttt=0;
