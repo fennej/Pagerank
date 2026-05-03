@@ -1490,6 +1490,37 @@ void ecrituretabD(struct tableauD tabD, char* nom_fichier){
     fclose(f);
 }
 
+/**
+ * @brief Dump le graphe concentré dans un fichier
+ * 
+ * Chaque sommet du graphe concentré représente une CFC du graphe original.
+ * Les arcs connectent les CFCs entre elles.
+ * 
+ * @param graphe_concentre Tableau des arcs inter-CFCs
+ * @param nb_arcs Nombre d'arcs dans le graphe concentré
+ * @param nbcfc Nombre total de CFCs (sommets du graphe concentré)
+ * @param nom_fichier Chemin du fichier de sortie
+ */
+void dump_graphe_concentre(struct contigue* graphe_concentre, int nb_arcs, int nbcfc, char* nom_fichier){
+    FILE *f = fopen(nom_fichier, "w");
+    if(f == NULL){
+        printf("Erreur: impossible d'ouvrir %s\n", nom_fichier);
+        exit(1);
+    }
+    
+    // Header
+    fprintf(f, "%d %d %d\n", nbcfc, nbcfc, nb_arcs);
+    
+    // Arcs : CFC_source CFC_dest probabilité
+    for(int i = 0; i < nb_arcs; i++){
+        fprintf(f, "%d %d %.15lf\n", graphe_concentre[i].pred, 
+                graphe_concentre[i].suc, graphe_concentre[i].probabilite);
+    }
+    
+    fclose(f);
+    printf("Graphe concentré dumped dans: %s\n", nom_fichier);
+}
+
 
 int main(){
 
@@ -1567,6 +1598,7 @@ transformation_matrice(tableauSommets,Nbsommet,nb_sommets_par_cfc,cfc,nbcfc,Nbva
 
 
 
+
 struct contigue * graphe_conc;
 int nb_arcs_graphe_conc;
 
@@ -1611,7 +1643,7 @@ int cc=0;
 
 
 for (int i=0;i<nbcfc;i++){
-    if(nb_sommets_par_cfc[i]>1){
+    if(nb_sommets_par_cfc[i]>70){
         vecteur0=recherchep_sans_surf(tableau_de_sousmatrice_cfc_contigue[i],
             vecteur0,
             nbarcs_par_cfc[i],
@@ -1649,6 +1681,9 @@ graphe_concentre(tableauSommets,
 );
 
 printf("graphe concentre done\n");
+
+dump_graphe_concentre(graphe_conc, nb_arcs_graphe_conc, nbcfc, "graphe_concentre.txt");
+printf("graphe concentre dumped\n");
 
 
 double ttt=0;
@@ -1689,7 +1724,7 @@ free(nbarcs_par_cfc);
 
 printf("combinaison done\n");
 
-double a = 0.5; // à tuner entre 0 et 1
+double a = 0.4; // à tuner entre 0 et 1
 
 for(int i=0;i<Nbsommet;i++){
     int cfc_sommet = cfc[i];
@@ -1703,6 +1738,8 @@ for(int i=0;i<Nbsommet;i++){
     papa+=vecteur0[i];
 }
 printf("Somme finale: %f\n", papa);
+
+
 
 nbiter=0;
 vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter,0);
