@@ -628,13 +628,12 @@ struct IntStack* creer_intstack(int capacity){
     return stack;
 }
 
-int pop_intstack(struct IntStack *stack){
+void pop_intstack(struct IntStack *stack){
     if(stack->top==-1){
-        return -1; // ou une autre valeur pour indiquer que la pile est vide
+    return;
     }
     int sommet=stack->data[stack->top];
     stack->top--;
-    return sommet;
 }
 int peek_intstack(struct IntStack *stack){
     if(stack->top==-1){
@@ -854,8 +853,8 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     int* visited=malloc(nbsommets*sizeof(int));
     memset(visited,-1,nbsommets*sizeof(int));
     //creation de la stack
-    struct list_chainne_de_sommet* stack_visited=NULL;//la pile qui garde l'ordre de visite de premier dfs 
-    struct list_chainne_de_sommet* stack_iterations=NULL;
+    struct IntStack* stack_visited=creer_intstack(nbsommets);//la pile qui garde l'ordre de visite de premier dfs 
+    struct IntStack* stack_iterations=creer_intstack(nbsommets);
     //paroucr en largeur
     int cfc_counter=-1;// pour pouvoir l'incrementer en suite dans la premiere while et que ca fasse 0
     int sommet_courant=0;
@@ -863,10 +862,10 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     int predecesseurs;//est utilise dans la deuxiemme partie de cette algo 
     *nb_sommets_par_cfc=malloc(nbsommets*sizeof(int));//on ne sais pas combien de cfc on vas trouver donc on alloue pour le pire cas ou chaque sommet est une cfc et on vas desalouer apres;
     memset(*nb_sommets_par_cfc,0,nbsommets*sizeof(int));
-    struct list_chainne_de_sommet** vecteur_acceleration_pred=malloc(nbsommets*sizeof(struct list_chainne_de_sommet*));
+    struct list_chainne_de_sommet** vecteur_acceleration_pred_suc=malloc(nbsommets*sizeof(struct list_chainne_de_sommet*));
    
     for(int i=0;i<nbsommets;i++){
-        vecteur_acceleration_pred[i]=graph_pred.tab[i];
+        vecteur_acceleration_pred_suc[i]=graph.tab[i];
     }
 
 
@@ -874,36 +873,44 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     int index_visited=0;
 
     while( ( c=tout_visite(visited,nbsommets,&index_visited))!=-1){ 
-        stack_iterations=stack(stack_iterations,c);
+        stack_intstack(stack_iterations,c);
         sommet_courant=c;
         //   printf("le sommet courant est %d",sommet_courant);
         //sleep(5);
-        while(stack_iterations!=NULL){
+        while(stack_iterations->top!=-1){
             // printf("les iterations\n");
             // afficher_liste_chainne(stack_iterations);
             // sleep(7);
 
 
             //dans la stack du paroucr en profondeur on prends le sommet actuelle et on ajoute au visité
-            sommet_courant=peek(stack_iterations);
+            sommet_courant=peek_intstack(stack_iterations);
 
             visited[sommet_courant]=0;
             successeur=graph.tab[sommet_courant];
+
+            successeur=vecteur_acceleration_pred_suc[sommet_courant];
+
 
             //rechercher le prochain successeur non visitééé
             while(successeur!=NULL&&visited[successeur->sommet-1]!=-1){
                 successeur=successeur->suiv;
             }
-            
+            vecteur_acceleration_pred_suc[sommet_courant]=successeur;// pour accelerer la recherche et ne pas reparcourir les memes successeurs deja parcourue 
+
             //on a soit un sommet qui a des successeurs non visité au quelle on vas les parcourire donc on continue le DFS
             //sinon on pop dans la stack des des iterations pour ne pas faire un algo recurcif ...
             if(successeur!=NULL){
-                stack_iterations = stack(stack_iterations,successeur->sommet-1);
+                stack_intstack(stack_iterations,successeur->sommet-1);
             }else{
-                stack_visited=stack(stack_visited,sommet_courant);
-                stack_iterations = pop(stack_iterations);
+                stack_intstack(stack_visited,sommet_courant);
+                 pop_intstack(stack_iterations);
             }
         }
+    }
+
+    for(int i=0;i<nbsommets;i++){
+        vecteur_acceleration_pred_suc[i]=graph_pred.tab[i];
     }
 
     memset(visited,-1,nbsommets*sizeof(int));
@@ -913,29 +920,29 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
     // printf("=========affichage de visited==========\n");
     // afficher_liste_chainne(stack_visited);    
 
-    while(stack_visited!=NULL){
+    while(stack_visited->top!=-1){
 
-        while(stack_visited!=NULL&&visited[peek(stack_visited)]!=-1){
-            stack_visited=pop(stack_visited);
+        while(stack_visited->top!=-1&&visited[peek_intstack(stack_visited)]!=-1){
+            pop_intstack(stack_visited);
         }
 
-        if(stack_visited!=NULL){
+        if(stack_visited->top!=-1){
             cfc_counter++; // on augmente le nombre de cfc trouvé
 
             
-            stack_iterations=stack(stack_iterations,peek(stack_visited));// on a trouve un sommet dans la stack des visités(replis dans la premmière partie) qui n'est pas visite et donc on le met dans la stack du parcour 
-            stack_visited=pop(stack_visited);
+            stack_intstack(stack_iterations,peek_intstack(stack_visited));// on a trouve un sommet dans la stack des visités(replis dans la premmière partie) qui n'est pas visite et donc on le met dans la stack du parcour 
+            pop_intstack(stack_visited);
 
             // la on commance le parcour avec le graphe inversé cad des predecesseurs 
-            while(stack_iterations!=NULL){
+            while(stack_iterations->top!=-1){
 
 
 
-                sommet_courant=peek(stack_iterations);
+                sommet_courant=peek_intstack(stack_iterations);
                 if(visited[sommet_courant]==-1)
                 (*nb_sommets_par_cfc)[cfc_counter]++;
                 visited[sommet_courant]=cfc_counter;//visited prend la valeur du numero de la cfc 
-                successeur=vecteur_acceleration_pred[sommet_courant];//pour accelerer la recherche des predecesseurs on utilise un vecteur d'acceleration qui contient les predecesseurs de chaque sommet
+                successeur=vecteur_acceleration_pred_suc[sommet_courant];//pour accelerer la recherche des predecesseurs on utilise un vecteur d'acceleration qui contient les predecesseurs de chaque sommet
                 
 
                 // printf("cfc counter est %d\n",cfc_counter);
@@ -948,7 +955,7 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
                 while(successeur!=NULL&&visited[successeur->sommet-1]!=-1){
                     successeur=successeur->suiv;
                 }
-                vecteur_acceleration_pred[sommet_courant]=successeur;//pour accelerer la recherche des predecesseurs on utilise un vecteur d'acceleration qui contient les predecesseurs de chaque sommet et on le met a jour a chaque fois qu'on cherche un predecesseur non visité pour ne pas refaire la recherche a partir du debut de la liste chaînée des predecesseurs
+                vecteur_acceleration_pred_suc[sommet_courant]=successeur;//pour accelerer la recherche des predecesseurs on utilise un vecteur d'acceleration qui contient les predecesseurs de chaque sommet et on le met a jour a chaque fois qu'on cherche un predecesseur non visité pour ne pas refaire la recherche a partir du debut de la liste chaînée des predecesseurs
        
 
                 // printf("etat de suc \n");
@@ -961,22 +968,22 @@ int* kosaraju(struct tableau_liste_chainne graph, struct tableau_liste_chainne g
                 if(successeur!=NULL){
 
                     //printf("la stack it vas ietre mis a jour \n la valeur insere est :%d\n",successeur->sommet-1);
-                    stack_iterations = stack(stack_iterations,successeur->sommet-1);
+                    stack_intstack(stack_iterations,successeur->sommet-1);
                 }else{
-                    stack_iterations = pop(stack_iterations);
+                    pop_intstack(stack_iterations);
                 }
             }
 
 
         }
     }
-
+    
 
     *nbcfc=cfc_counter+1;
     (*nb_sommets_par_cfc)=realloc((*nb_sommets_par_cfc),(*nbcfc)*sizeof(int));
-    libmemstack(&stack_visited);
-    libmemstack(&stack_iterations);
-    free(vecteur_acceleration_pred);
+    libmem_intstack(stack_iterations);
+    libmem_intstack(stack_visited);
+    free(vecteur_acceleration_pred_suc);
     return visited;
 }
 
