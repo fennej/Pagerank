@@ -50,6 +50,12 @@ struct list_chainne_de_sommet{
     struct list_chainne_de_sommet* suiv;    //a changer il faut creer une structure pour ne pas recomencer a la recherche ... 
 }; 
 
+struct IntStack{
+    int *data;
+    int top;
+    int capacity;
+};
+
 
 struct tableau_liste_chainne{
     struct list_chainne_de_sommet** tab;
@@ -614,6 +620,42 @@ struct list_chainne_de_sommet* creer_liste(int sommet){
     return nouvelle_liste;
 }
 
+struct IntStack* creer_intstack(int capacity){
+    struct IntStack *stack=malloc(sizeof(struct IntStack));
+    stack->data=malloc(capacity*sizeof(int));
+    stack->top=-1;
+    stack->capacity=capacity;
+    return stack;
+}
+
+int pop_intstack(struct IntStack *stack){
+    if(stack->top==-1){
+        return -1; // ou une autre valeur pour indiquer que la pile est vide
+    }
+    int sommet=stack->data[stack->top];
+    stack->top--;
+    return sommet;
+}
+int peek_intstack(struct IntStack *stack){
+    if(stack->top==-1){
+        return -1; // ou une autre valeur pour indiquer que la pile est vide
+    }
+    return stack->data[stack->top];
+}
+
+void stack_intstack(struct IntStack *stack,int sommet){
+    if(stack->top==stack->capacity-1){
+        // redimensionner la pile
+        exit(EXIT_FAILURE);
+    }
+    stack->top++;
+    stack->data[stack->top]=sommet;
+}
+
+void libmem_intstack(struct IntStack *stack){
+    free(stack->data);
+    free(stack);
+}
 
 /**
  * @brief Retire et désalloue le premier nœud de la pile (LIFO).
