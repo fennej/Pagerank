@@ -1688,8 +1688,8 @@ void graphe_concentre_rapide(struct contigue* tableauSommets,double * vecteur0,i
         int j=i;
         if(cfc_sommet!=cfc_successeur){ // on ne garde que les arcs qui partent d'une cfc non triviale vers une cfc non triviale 
                 while(j<Nbarcs&&cfc[tableauSommets[j].pred-1]==cfc_sommet&&cfc[tableauSommets[j].suc-1]==cfc_successeur){
-                    if(vecteur0[tableauSommets[j].pred-1]*tableauSommets[j].probabilite>0){
-                        tableau_proba_cumule_par_cfc[cfc_sommet]+=vecteur0[tableauSommets[j].pred-1]*tableauSommets[j].probabilite;
+                    if(/*vecteur0[tableauSommets[j].pred-1]**/tableauSommets[j].probabilite>0){
+                        tableau_proba_cumule_par_cfc[cfc_sommet]+=/*vecteur0[tableauSommets[j].pred-1]**/tableauSommets[j].probabilite;
                     }
                     j++;
                 }
