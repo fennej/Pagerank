@@ -18,6 +18,7 @@ typedef struct successeur{
  double BIG_EPSILON = 0.0001;
  double ALPHA=0.9;
 double sum=0;
+int * cfc_pour_comp=NULL;
 
 int NUM_THREADS=10;
 double TRESHOLD= 0.00001;
@@ -74,6 +75,57 @@ void sup_aretes(double proba_minimale,struct contigue* tab,int Nbvaleurs){
             tab[i].probabilite=0;
         }
     }
+}
+
+/**
+ * @brief Écrit le contenu du graphe contigue dans un fichier
+ * @param tab Tableau contigue représentant les arêtes du graphe
+ * @param Nbvaleurs Nombre d'arêtes dans le graphe
+ * @param filename Nom du fichier de sortie
+ */
+void dump_graphe_contigue(struct contigue* tab, int Nbvaleurs, const char* filename){
+    if(tab == NULL){
+        fprintf(stderr, "Graphe vide ou non initialisé\n");
+        return;
+    }
+    
+    FILE* file = fopen(filename, "w");
+    if(file == NULL){
+        fprintf(stderr, "Erreur ouverture fichier %s\n", filename);
+        return;
+    }
+    
+    fprintf(file, "=== DUMP GRAPHE CONTIGUE ===\n");
+    fprintf(file, "Nombre d'arêtes: %d\n", Nbvaleurs);
+    fprintf(file, "%-8s %-8s %-15s\n", "Pred", "Suc", "Probabilite");
+    fprintf(file, "---------------------------------------\n");
+    
+    double min_prob = 1.0, max_prob = 0.0;
+    double sum_prob = 0.0;
+    int count_non_zero = 0;
+    
+    for(int i = 0; i < Nbvaleurs; i++){
+        fprintf(file, "%-8d %-8d %-15.10f\n", tab[i].pred, tab[i].suc, tab[i].probabilite);
+        
+        if(tab[i].probabilite > 0){
+            count_non_zero++;
+            sum_prob += tab[i].probabilite;
+            if(tab[i].probabilite < min_prob) min_prob = tab[i].probabilite;
+            if(tab[i].probabilite > max_prob) max_prob = tab[i].probabilite;
+        }
+    }
+    
+    fprintf(file, "---------------------------------------\n");
+    fprintf(file, "Arêtes non-nulles: %d\n", count_non_zero);
+    if(count_non_zero > 0){
+        fprintf(file, "Probabilité min: %.10f\n", min_prob);
+        fprintf(file, "Probabilité max: %.10f\n", max_prob);
+        fprintf(file, "Probabilité moyenne: %.10f\n", sum_prob / count_non_zero);
+    }
+    fprintf(file, "==============================\n");
+    
+    fclose(file);
+    printf("Dump écrit dans le fichier: %s\n", filename);
 }
 
 
@@ -1455,8 +1507,7 @@ free(probabilite_cummle_par_arc_supprime);
  */
 void graphe_concentre(struct contigue* tableauSommets,double * vecteur0,int Nbsommets,int Nbarcs,int * cfc,int nbcfc_totale, int * nbsommets_par_cfc,struct contigue ** graphe_concentre_result, int * nb_arcs_graphe_concentre_result,struct tableauD * tabD_result){
 
-        int nb_arcs_graphe_concentre = Nbarcs;
-    
+    int nb_arcs_graphe_concentre = Nbarcs;
 
     struct tableauD tabD;
     tabD.Nbsommet=0;
@@ -1504,10 +1555,9 @@ void graphe_concentre(struct contigue* tableauSommets,double * vecteur0,int Nbso
                     }
                     else{
                         temp->proba+=vecteur0[sommet-1]*tableauSommets[i].probabilite;// la proba de l'arc dans le graphe concentre est la proba de l'arc dans le graphe initial multiplié par la proba du sommet successeur dans le vecteur0 pour prendre en compte la renormalisation qui a été faite dans la transformation de la matrice
-                            tableau_proba_cumule_par_cfc[cfc_sommet]+=vecteur0[sommet-1]*tableauSommets[i].probabilite;
+                        tableau_proba_cumule_par_cfc[cfc_sommet]+=vecteur0[sommet-1]*tableauSommets[i].probabilite;
                     }
-
-            }
+                }
             //}   
         }
     }
@@ -1518,7 +1568,7 @@ void graphe_concentre(struct contigue* tableauSommets,double * vecteur0,int Nbso
          if(temp==NULL){ // si la cfc est non triviale et n'a pas de succeseur dans le graphe concentre alors on ajoute dans le tablau D la cfc normalise a 0 et on continue si non le tableau d onctiendra des cfc a -1 
             tabD.tabD[tabD.Nbsommet]=i;// dans le tableau d on stock l'index 0 based pas 1 based 
             tabD.Nbsommet++;
-         }
+        }
         while(temp!=NULL){// pas la paine de verif le nombre de sommets car on ajoute des temps uniquement quand nbsommetcfc > 1
             if(tableau_proba_cumule_par_cfc[i]==0){
                 printf("we got a problem\n");
@@ -1576,6 +1626,121 @@ void graphe_concentre(struct contigue* tableauSommets,double * vecteur0,int Nbso
      *nb_arcs_graphe_concentre_result=index;
      *tabD_result=tabD;
 }
+
+
+int comp_contigue(const void *a, const void *b) {
+    struct contigue *arcA = (struct contigue *)a;
+    struct contigue *arcB = (struct contigue *)b;
+
+    if (cfc_pour_comp[arcA->pred-1] > cfc_pour_comp[arcB->pred-1]) {
+        return 1; // Tri par prédécesseur
+    } else if (cfc_pour_comp[arcA->pred-1] < cfc_pour_comp[arcB->pred-1]) {
+        return -1;
+    } else {
+        return cfc_pour_comp[arcA->suc-1] - cfc_pour_comp[arcB->suc-1]; // Si les prédécesseurs sont égaux, tri par successeur
+    }
+}
+
+/**
+ * @brief le tableau contigue dois absolument etre trie par rapport au predecesseur 
+ * 
+ * @param tableauSommets Tableau contiguë du graphe initial (format: predecesseur, successeur, probabilité)
+ * @param vecteur0 Vecteur des probabilités/poids de chaque sommet du graphe initial
+ * @param Nbsommets Nombre total de sommets dans le graphe initial
+ * @param Nbarcs Nombre total d'arcs dans le graphe initial
+ * @param cfc Tableau de mapping: cfc[i] = numéro de CFC du sommet i
+ * @param nbcfc_totale Nombre total de composantes fortement connexes
+ * @param nbsommets_par_cfc Tableau: nbsommets_par_cfc[i] = nombre de sommets dans la CFC i
+ * @param graphe_concentre_result Pointeur de sortie: tableau contiguë du graphe concentré
+ * @param nb_arcs_graphe_concentre_result Pointeur de sortie: nombre d'arcs dans le graphe concentré
+ * @param tabD_result Pointeur de sortie: tableau des CFCs sans successeurs (dangling nodes)
+ */
+void graphe_concentre_rapide(struct contigue* tableauSommets,double * vecteur0,int Nbsommets,int Nbarcs,int * cfc,int nbcfc_totale, int * nbsommets_par_cfc,struct contigue ** graphe_concentre_result, int * nb_arcs_graphe_concentre_result,struct tableauD * tabD_result){
+
+    int nb_arcs_graphe_concentre = Nbarcs;
+
+    struct tableauD tabD;
+    tabD.Nbsommet=0;
+    tabD.tabD=malloc(nbcfc_totale*sizeof(int));
+    if(tabD.tabD==NULL){
+        printf("erreur allocation tabD.tabD\n");
+        exit(1);
+    }
+    struct contigue * graphe_concentre=malloc(nb_arcs_graphe_concentre*sizeof(struct contigue));
+    if(graphe_concentre==NULL){
+        printf("erreur allocation graphe_concentre\n");
+        exit(1);
+    }
+    double * tableau_proba_cumule_par_cfc=malloc(nbcfc_totale*sizeof(double));
+    if(tableau_proba_cumule_par_cfc==NULL){
+        printf("erreur allocation tableau_proba_cumule_par_cfc\n");
+        exit(1);
+    }
+        memset(tableau_proba_cumule_par_cfc,0,nbcfc_totale*sizeof(double));
+
+
+    int index=0; // pour remplir le graphe concentre
+    int i=0;
+
+    while(i<Nbarcs){
+        int cfc_sommet=cfc[tableauSommets[i].pred-1];
+        int cfc_successeur=cfc[tableauSommets[i].suc-1];
+        int j=i;
+        if(cfc_sommet!=cfc_successeur){ // on ne garde que les arcs qui partent d'une cfc non triviale vers une cfc non triviale 
+                while(j<Nbarcs&&cfc[tableauSommets[j].pred-1]==cfc_sommet&&cfc[tableauSommets[j].suc-1]==cfc_successeur){
+                    if(vecteur0[tableauSommets[j].pred-1]*tableauSommets[j].probabilite>0){
+                        tableau_proba_cumule_par_cfc[cfc_sommet]+=vecteur0[tableauSommets[j].pred-1]*tableauSommets[j].probabilite;
+                    }
+                    j++;
+                }
+                if(tableau_proba_cumule_par_cfc[cfc_sommet]>0){
+                    graphe_concentre[index].pred=cfc_sommet+1;
+                    graphe_concentre[index].suc=cfc_successeur+1;
+                    graphe_concentre[index].probabilite=tableau_proba_cumule_par_cfc[cfc_sommet];// la proba de l'arc dans le graphe concentre est la proba de l'arc dans le graphe initial multiplié par la proba du sommet successeur dans le vecteur0 pour prendre en compte la renormalisation qui a été faite dans la transformation de la matrice
+                    index++; 
+                }
+                tableau_proba_cumule_par_cfc[cfc_sommet]=0;
+            i=j;
+         }else{
+            i++;
+         }
+       
+    }
+
+    #pragma omp parallel
+    {
+    //  memset(tableau_proba_cumule_par_cfc,0,nbcfc_totale*sizeof(double));
+        #pragma omp for
+        for(int i=0;i<index;i++){
+            #pragma omp atomic 
+            tableau_proba_cumule_par_cfc[graphe_concentre[i].pred-1]+=graphe_concentre[i].probabilite;
+        }
+
+        #pragma omp single 
+        for(int i=0;i<nbcfc_totale;i++){
+            if(tableau_proba_cumule_par_cfc[i]==0){
+                tabD.tabD[tabD.Nbsommet]=i;// dans le tableau d on stock l'index 0 based pas 1 based 
+                tabD.Nbsommet++;
+            }
+        }
+        #pragma omp for
+        for(int i=0;i<index;i++){
+            if(tableau_proba_cumule_par_cfc[graphe_concentre[i].pred-1]==0){
+                printf("we got a problem in the renormalisation of the graphe concentre %lf %d\n",tableau_proba_cumule_par_cfc[graphe_concentre[i].pred-1],graphe_concentre[i].pred-1);
+                exit(1);
+            }
+            graphe_concentre[i].probabilite=graphe_concentre[i].probabilite/tableau_proba_cumule_par_cfc[graphe_concentre[i].pred-1];// on renormalise la proba de l'arc dans le graphe concentre en divisant par la proba cumule des arcs qui partent de la meme cfc pour que la somme des proba qui partent de la meme cfc soit 1 et donc ne pas changer le page rank
+        }
+    }
+    free(tableau_proba_cumule_par_cfc);
+    graphe_concentre=realloc(graphe_concentre,(index)*sizeof(struct contigue));
+
+     *graphe_concentre_result=graphe_concentre;
+     *nb_arcs_graphe_concentre_result=index;
+     *tabD_result=tabD;
+
+}
+
 
 
 void ecritutrfichier(struct contigue* graphe_concentre,int nb_arcs_graphe_concentre, char* nom_fichier){
@@ -1681,7 +1846,7 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("wiki2.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred,1);
+struct contigue *tableauSommets = lecturefichier_matrixm("sx-stackoverflow.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred,1);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 double start_time = omp_get_wtime();
@@ -1756,8 +1921,11 @@ for(int i=0;i<Nbsommet;i++){
 
 double start_time_recherche_sans_surf = omp_get_wtime();
 
+omp_set_nested(1);
+omp_set_num_threads(1); 
+#pragma omp parallel for
 for (int i=0;i<nbcfc;i++){
-    if(nb_sommets_par_cfc[i]>70){
+    if(nb_sommets_par_cfc[i]>40){
         vecteur0=recherchep_sans_surf(tableau_de_sousmatrice_cfc_contigue[i],
             vecteur0,
             nbarcs_par_cfc[i],
@@ -1771,19 +1939,26 @@ for (int i=0;i<nbcfc;i++){
 double end_time_recherche_sans_surf = omp_get_wtime();
 printf("Temps d'exécution de la recherche sans surf : %f secondes\n", end_time_recherche_sans_surf - start_time_recherche_sans_surf);
 
-// printf("recherche sans surf done\n");
-//         sum=0;
-//     for(int i=0;i<Nbsommet;i++){
-//         sum+=vecteur0[i];
-//     }   
-//     printf("la somme des elements du vecteur0 est %f\n", sum);
+printf("recherche sans surf done\n");
+        sum=0;
+    for(int i=0;i<Nbsommet;i++){
+        sum+=vecteur0[i];
+    }   
+    printf("la somme des elements du vecteur0 est %f\n", sum);
+    printf("dois ertre egale a %d\n", nbcfc);
 
 
 int nbiter=0;
 struct tableauD tabD_graphe_concentre;
 
 
-graphe_concentre(tableauSommets,
+cfc_pour_comp = cfc;
+qsort(tableauSommets, Nbval, sizeof(struct contigue), comp_contigue);
+cfc_pour_comp = NULL;
+
+printf("tableau contigue trie\n");
+
+graphe_concentre_rapide(tableauSommets,
     vecteur0,
     Nbsommet,
     Nbval,
@@ -1797,6 +1972,9 @@ graphe_concentre(tableauSommets,
 
 printf("graphe concentre done\n");
 
+//dump_graphe_concentre(graphe_conc, nb_arcs_graphe_conc, nbcfc, "output/graphe_concentre_rapide_multithreaded.txt");
+
+//exit(1);
 
 double ttt=0;
 double* vecteur_graph_reduit= malloc(nbcfc*sizeof(double));
@@ -1836,7 +2014,7 @@ free(nbarcs_par_cfc);
 
 printf("combinaison done\n");
 
-double a = 0.4; // à tuner entre 0 et 1
+double a = 1; // à tuner entre 0 et 1
 
 for(int i=0;i<Nbsommet;i++){
     int cfc_sommet = cfc[i];
@@ -1851,7 +2029,9 @@ for(int i=0;i<Nbsommet;i++){
 // }
 // printf("Somme finale: %f\n", papa);
 
-
+// for(int i=0;i<Nbsommet;i++){
+//     vecteur0[i]=1/Nbsommet;
+// }
 
 nbiter=0;
 vecteur0=recherchep(tableauSommets,vecteur0,tabD,Nbsommet,Nbval,&nbiter,0);
