@@ -245,7 +245,7 @@ double dynamic_threshold(struct contigue *tableauSommets, int Nbvaleurs) {
     // Seuil dynamique
     double threshold = mean - 2 * sigma;
     if( threshold < 0) {// souvant negatif si les valeurs sont dispersees  de la moyenne 
-        threshold = mean*0.1; //Si une transition est 10 fois plus faible que la moyenne, je considère que c’est une erreur ou un lien insignifiant
+        threshold = mean*0.10; //Si une transition est 10 fois plus faible que la moyenne, je considère que c’est une erreur ou un lien insignifiant
     }
 
     return threshold;
@@ -1655,7 +1655,7 @@ int comp_contigue(const void *a, const void *b) {
  * @param nb_arcs_graphe_concentre_result Pointeur de sortie: nombre d'arcs dans le graphe concentré
  * @param tabD_result Pointeur de sortie: tableau des CFCs sans successeurs (dangling nodes)
  */
-void graphe_concentre_rapide(struct contigue* tableauSommets,double * vecteur0,int Nbsommets,int Nbarcs,int * cfc,int nbcfc_totale, int * nbsommets_par_cfc,struct contigue ** graphe_concentre_result, int * nb_arcs_graphe_concentre_result,struct tableauD * tabD_result){
+void graphe_concentre_rapide(struct contigue* tableauSommets,int Nbsommets,int Nbarcs,int * cfc,int nbcfc_totale, int * nbsommets_par_cfc,struct contigue ** graphe_concentre_result, int * nb_arcs_graphe_concentre_result,struct tableauD * tabD_result){
 
     int nb_arcs_graphe_concentre = Nbarcs;
 
@@ -1688,8 +1688,8 @@ void graphe_concentre_rapide(struct contigue* tableauSommets,double * vecteur0,i
         int j=i;
         if(cfc_sommet!=cfc_successeur){ // on ne garde que les arcs qui partent d'une cfc non triviale vers une cfc non triviale 
                 while(j<Nbarcs&&cfc[tableauSommets[j].pred-1]==cfc_sommet&&cfc[tableauSommets[j].suc-1]==cfc_successeur){
-                    if(/*vecteur0[tableauSommets[j].pred-1]**/tableauSommets[j].probabilite>0){
-                        tableau_proba_cumule_par_cfc[cfc_sommet]+=/*vecteur0[tableauSommets[j].pred-1]**/tableauSommets[j].probabilite;
+                    if(tableauSommets[j].probabilite>0){
+                        tableau_proba_cumule_par_cfc[cfc_sommet]+=tableauSommets[j].probabilite;
                     }
                     j++;
                 }
@@ -1846,11 +1846,11 @@ struct tableauD* tabD=malloc(sizeof(struct tableauD));
 
 
 /*POUR LE FORMAT MTX*/
-struct contigue *tableauSommets = lecturefichier_matrixm("sx-stackoverflow.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred,1);
+struct contigue *tableauSommets = lecturefichier_matrixm("wiki3.mtx",&Nblignes,&Nbacrs,&Nbval,&tabD,&graph_suc,&graph_pred,0);
 //afficher_contigue(tableauSommets,Nbval);
 Nbsommet=Nblignes;
 double start_time = omp_get_wtime();
-//suppression_epsilon_transitions(&tableauSommets,Nbsommet,&Nbval,tabD,&graph_suc,&graph_pred,1);
+suppression_epsilon_transitions(&tableauSommets,Nbsommet,&Nbval,tabD,&graph_suc,&graph_pred,1);
 
 
 int nbcfc;// nombre de composantes fortement connexes
@@ -1875,12 +1875,9 @@ printf("le nombre de cfc est %d\n", nbcfc);
 #pragma omp section
 {
 libmem_grapth_sucpred(graph_suc, graph_pred); // Libération de la mémoire des graphes de successeurs et prédécesseurs après l'extraction des CFCs
-
 }
 #pragma omp section
-{   
-//transformation_matrice(tableauSommets,Nbsommet,nb_sommets_par_cfc,cfc,nbcfc,Nbval,&tableau_de_sousmatrice_cfc_contigue,&nbarcs_par_cfc);
-    
+{       
 transformation_matrice_rapide(tableauSommets,Nbsommet,nb_sommets_par_cfc,cfc,nbcfc,Nbval,&tableau_de_sousmatrice_cfc_contigue,&nbarcs_par_cfc);
 }
 }
@@ -1959,7 +1956,6 @@ cfc_pour_comp = NULL;
 printf("tableau contigue trie\n");
 
 graphe_concentre_rapide(tableauSommets,
-    vecteur0,
     Nbsommet,
     Nbval,
     cfc,
@@ -2022,12 +2018,6 @@ for(int i=0;i<Nbsommet;i++){
     double poids_taille = (double)nb_sommets_par_cfc[cfc_sommet] / Nbsommet;
     vecteur0[i] *= a * poids_structure + (1-a) * poids_taille;
 }
-
-// double papa=0;
-// for(int i=0;i<Nbsommet;i++){   
-//     papa+=vecteur0[i];
-// }
-// printf("Somme finale: %f\n", papa);
 
 // for(int i=0;i<Nbsommet;i++){
 //     vecteur0[i]=1/Nbsommet;
